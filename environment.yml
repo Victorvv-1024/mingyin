@@ -1,0 +1,4 @@
+name: .conda
+channels:
+  - defaults
+prefix: /Users/victor/miniconda3/envs/.conda
