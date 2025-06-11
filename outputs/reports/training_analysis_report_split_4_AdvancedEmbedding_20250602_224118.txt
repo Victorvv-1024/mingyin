@@ -1,0 +1,121 @@
+TRAINING SPLIT ANALYSIS REPORT
+==================================================
+Split: 4 - 2021+2022Q1Q2Q3 → 2022_Q4
+Model Type: AdvancedEmbedding
+Generated: 2025-06-02 23:52:23.455448
+Total Predictions: 157,500
+
+OVERALL PERFORMANCE METRICS
+------------------------------
+Mean Absolute Percentage Error: 7.59%
+Median Absolute Percentage Error: 5.75%
+Standard Deviation of APE: 10.52%
+Mean Absolute Error: 126 units
+Root Mean Square Error: 5396 units
+
+ERROR DISTRIBUTION BY CATEGORY
+------------------------------
+Very Good (5-10%): 61,294 (38.9%)
+Excellent (<5%): 59,111 (37.5%)
+Good (10-20%): 31,165 (19.8%)
+Fair (20-50%): 5,085 (3.2%)
+Poor (>50%): 845 (0.5%)
+
+ERROR PERCENTILES
+------------------
+10th percentile: 1.00%
+25th percentile: 3.27%
+50th percentile: 5.75%
+75th percentile: 9.64%
+90th percentile: 14.92%
+95th percentile: 18.54%
+99th percentile: 32.69%
+
+PERFORMANCE BY PLATFORM
+-------------------------
+Douyin:
+  Mean APE: 18.34%
+  Median APE: 12.83%
+  Samples: 7,500
+  Perfect predictions: 229
+
+JD:
+  Mean APE: 6.81%
+  Median APE: 5.48%
+  Samples: 102,907
+  Perfect predictions: 67,214
+
+Tmall:
+  Mean APE: 7.60%
+  Median APE: 6.54%
+  Samples: 47,093
+  Perfect predictions: 24,738
+
+PERFORMANCE BY MONTH
+--------------------
+Month 10: 6.90% MAPE (48,654 samples)
+Month 11: 7.94% MAPE (55,262 samples)
+Month 12: 7.86% MAPE (53,584 samples)
+
+TOP 10 BRANDS BY SAMPLE COUNT
+------------------------------
+茅台: 7.40% MAPE (20,727 samples, 13,688 perfect)
+五粮液: 7.46% MAPE (10,747 samples, 6,693 perfect)
+西凤: 7.15% MAPE (5,650 samples, 3,361 perfect)
+贵州: 7.79% MAPE (5,330 samples, 2,987 perfect)
+汾酒: 8.36% MAPE (4,709 samples, 2,484 perfect)
+习酒: 6.93% MAPE (4,380 samples, 2,698 perfect)
+郎酒: 8.21% MAPE (4,161 samples, 2,171 perfect)
+泸州老窖: 9.50% MAPE (3,886 samples, 1,712 perfect)
+杜康: 8.16% MAPE (3,697 samples, 1,862 perfect)
+牛栏山: 7.02% MAPE (3,637 samples, 2,148 perfect)
+
+TOP 10 STORES BY SAMPLE COUNT
+------------------------------
+苏宁易购官方旗舰店: 6.46% MAPE (1,849 samples, 1,174 perfect)
+酒仙网官方旗舰店: 6.14% MAPE (1,056 samples, 699 perfect)
+泸州老窖官方旗舰店: 10.93% MAPE (796 samples, 212 perfect)
+郎酒官方旗舰店: 8.03% MAPE (788 samples, 397 perfect)
+凌翔酒类专营店: 4.02% MAPE (751 samples, 684 perfect)
+五粮液官方旗舰店: 7.81% MAPE (673 samples, 349 perfect)
+洋河官方旗舰店: 9.93% MAPE (567 samples, 139 perfect)
+京东超市白酒自营专区: 8.92% MAPE (551 samples, 216 perfect)
+牛栏山官方旗舰店: 7.60% MAPE (520 samples, 276 perfect)
+贵州茅台酱香酒京东自营旗舰店: 9.37% MAPE (515 samples, 206 perfect)
+
+SUSPICION ANALYSIS
+------------------
+Perfect predictions (<1 unit error): 92,181 (58.5%)
+⚠️ WARNING: High percentage of perfect predictions may indicate data leakage
+
+PREDICTION RANGE ANALYSIS
+-------------------------
+Predicted sales range: [1, 144230]
+Actual sales range: [1, 1776389]
+Range coverage ratio: 0.08
+
+WORST PREDICTIONS (Top 10)
+---------------------------
+Actual:     8116, Predicted:    95890, APE: 1081.4% (赖仁白酒专营店, 茅台)
+Actual:    13017, Predicted:   128472, APE:  886.9% (赖仁白酒专营店, 茅台)
+Actual:    14643, Predicted:   100592, APE:  586.9% (赖仁官方旗舰店, 贵州)
+Actual:    18145, Predicted:   112277, APE:  518.7% (赖仁白酒专营店, 茅台)
+Actual:    18761, Predicted:    96380, APE:  413.7% (赖世安酒类专营店, 茅台)
+Actual:     4367, Predicted:    21739, APE:  397.7% (一村一河专营店, 白水杜康)
+Actual:    15765, Predicted:    75422, APE:  378.4% (赖仁白酒专营店, 贵州)
+Actual:    19418, Predicted:    91330, APE:  370.3% (不归酒仓旗舰店, 茅台)
+Actual:    12456, Predicted:    54894, APE:  340.7% (王匠酒类专营店, 茅台)
+Actual:    15631, Predicted:    67489, APE:  331.7% (天星王子白酒专营店, 茅台)
+
+BEST PREDICTIONS (Top 10)
+--------------------------
+Actual:       18, Predicted:       18, APE:    0.0% (甑缘酒类旗舰店, 甑缘)
+Actual:       14, Predicted:       14, APE:    0.0% (杜康官方旗舰店, 杜康)
+Actual:     1176, Predicted:     1176, APE:    0.0% (手艺人专营店, 黔王)
+Actual:       13, Predicted:       13, APE:    0.0% (五粮浓香官方旗舰店, 五粮浓香)
+Actual:       10, Predicted:       10, APE:    0.0% (壹玖壹玖官方旗舰店, 1919.cn)
+Actual:       19, Predicted:       19, APE:    0.0% (泸州老窖京东自营官方旗舰店, 国窖1573)
+Actual:       24, Predicted:       24, APE:    0.0% (炫猫酒类专营店, 蓝色之缘)
+Actual:       11, Predicted:       11, APE:    0.0% (酒仙网官方旗舰店, 汾酒)
+Actual:       18, Predicted:       18, APE:    0.0% (四特酒旗舰店, 四特酒)
+Actual:        9, Predicted:        9, APE:    0.0% (忆楠竹酒类旗舰店, 杏花村)

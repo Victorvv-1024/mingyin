@@ -1,0 +1,8 @@
+SIMPLE MODEL TEST RESULTS
+========================================
+
+Test period: 2023
+Test samples: 683,818
+Features: 77
+
+No models tested
