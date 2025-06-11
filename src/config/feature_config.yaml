@@ -1,0 +1,244 @@
+# Feature Engineering Configuration for Sales Forecasting
+# This file configures all feature engineering parameters
+
+temporal_features:
+  # Basic temporal components
+  basic_temporal:
+    enable: true
+    components:
+      - month
+      - quarter 
+      - year
+      - day_of_year
+      - week_of_year
+      - month_progress
+      - quarter_progress
+      - days_since_epoch
+
+  # Cyclical transformations
+  cyclical:
+    enable: true
+    components:
+      - month_sin_cos
+      - quarter_sin_cos
+      - day_of_year_sin_cos
+      - week_sin_cos
+
+  # Promotional calendar features
+  promotional:
+    enable: true
+    intensity_calculation: true
+    distance_calculation: true
+    specific_events:
+      - singles_day
+      - chinese_new_year
+      - 618_shopping_festival
+      - double_12
+      - may_day_golden_week
+      - national_day_golden_week
+      - qixi_festival
+      - mothers_day
+      - fathers_day
+      - back_to_school
+
+  # Year-over-year features
+  yoy_features:
+    enable: true
+    lag_months: 12
+    growth_thresholds:
+      trend_up: 0.1
+      trend_down: -0.1
+    seasonal_consistency: true
+
+  # Lag features
+  lag_features:
+    enable: true
+    lag_periods: [1, 2, 3, 6, 12]
+    target_columns:
+      - sales_quantity
+      - sales_amount
+      - unit_price
+    fill_method: "zero"
+
+  # Rolling window features
+  rolling_features:
+    enable: true
+    windows: [3, 6, 12]
+    statistics:
+      - mean
+      - std
+      - min
+      - max
+      - median
+      - q25
+      - q75
+      - cv  # coefficient of variation
+    min_periods: 1
+
+  # Momentum and trend features
+  momentum_features:
+    enable: true
+    mom_change: true
+    trend_windows: [3, 6]
+    volatility_windows: [3, 6]
+    acceleration: true
+    momentum_thresholds:
+      up: 0.1
+      down: -0.1
+
+# Customer behavior features
+customer_behavior:
+  # Store behavior analysis
+  store_behavior:
+    enable: true
+    consistency_metrics: true
+    volatility_analysis: true
+    diversity_metrics: true
+    
+  # Brand analysis
+  brand_analysis:
+    enable: true
+    market_share: true
+    premium_indicators: true
+    promotional_effectiveness: true
+
+  # Store categorization
+  store_categorization:
+    enable: true
+    chinese_naming_patterns: true
+    store_types:
+      - flagship
+      - official
+      - supermarket
+      - specialty
+      - third_party
+
+# Platform dynamics
+platform_features:
+  enable: true
+  competitive_analysis: true
+  cross_platform_dynamics: true
+  platform_preference: true
+
+# Feature processing for deep learning
+deep_learning_preparation:
+  # Feature scaling and normalization
+  scaling:
+    method: "robust"  # robust, standard, minmax
+    feature_categories:
+      temporal_basic: "standard"
+      cyclical: "none"  # Already normalized
+      promotional: "none"  # Binary/categorical
+      lag: "robust"
+      rolling: "robust"
+      momentum: "robust"
+
+  # Feature categorization for embeddings
+  embedding_categories:
+    temporal_categorical:
+      - month
+      - quarter
+      - year
+    temporal_continuous:
+      - days_since_epoch
+      - month_progress
+      - quarter_progress
+    cyclical:
+      - month_sin
+      - month_cos
+      - quarter_sin
+      - quarter_cos
+      - day_of_year_sin
+      - day_of_year_cos
+    promotional_binary:
+      - is_promotional_period
+      - is_singles_day
+      - is_chinese_new_year
+      - is_618_shopping_festival
+    promotional_continuous:
+      - promotional_intensity
+      - days_to_next_promo
+      - days_from_last_promo
+
+  # Data type specifications for neural networks
+  data_types:
+    int32_features:
+      - month
+      - quarter
+      - year
+      - day_of_year
+      - week_of_year
+      - days_since_epoch
+    float32_features:
+      - month_progress
+      - quarter_progress
+      - promotional_intensity
+      - days_to_next_promo
+      - days_from_last_promo
+    binary_features:
+      - is_promotional_period
+      - momentum_up
+      - momentum_down
+      - momentum_stable
+      - yoy_trend_up
+      - yoy_trend_down
+      - yoy_trend_stable
+
+# Validation and quality checks
+validation:
+  # Feature completeness checks
+  completeness:
+    max_missing_ratio: 0.1
+    critical_features:
+      - month
+      - quarter
+      - year
+      - sales_quantity
+      - sales_amount
+
+  # Feature quality checks
+  quality:
+    check_infinite_values: true
+    check_extreme_outliers: true
+    outlier_threshold: 5.0  # z-score threshold
+
+  # Temporal integrity checks
+  temporal_integrity:
+    check_date_gaps: true
+    check_chronological_order: true
+    max_gap_months: 3
+
+# Feature importance and selection
+feature_selection:
+  # Automatic feature selection
+  auto_selection:
+    enable: false
+    method: "correlation"  # correlation, mutual_info, lasso
+    threshold: 0.05
+    
+  # Manual feature exclusion
+  exclude_features:
+    - entity_key  # Temporary grouping variables
+    - store_brand_platform_key
+
+# Logging and monitoring
+logging:
+  feature_engineering_steps: true
+  feature_counts: true
+  data_quality_metrics: true
+  processing_time: true
+
+# Performance optimization
+performance:
+  # Memory optimization
+  memory_efficient: true
+  chunk_size: 10000
+  
+  # Parallel processing
+  parallel_processing:
+    enable: true
+    n_jobs: -1  # Use all available cores
+    
+  # Caching
+  cache_intermediate_results: true
+  cache_directory: "cache/feature_engineering"

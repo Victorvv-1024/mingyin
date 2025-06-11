@@ -1,18 +1,21 @@
-# Model implementations 
-# Commenting out TensorFlow imports due to version compatibility issues
-# from .advanced_embedding import AdvancedEmbeddingModel, mape_metric_original_scale, rmse_metric_original_scale
-# from .trainer import ModelTrainer
+"""
+Model implementations for sales forecasting.
 
-# PyTorch implementation
-from .pytorch_advanced_embedding import PyTorchAdvancedEmbeddingModel, PyTorchModelTrainer
-from .evaluator import ModelEvaluator
+This package contains the complete deep learning infrastructure including:
+- Advanced embedding-based neural networks
+- Feature processing for multi-input models
+- Comprehensive training and evaluation pipelines
+- Result management and experiment tracking
+"""
+
+from .feature_processor import FeatureProcessor
+from .advanced_embedding import AdvancedEmbeddingModel, mape_metric_original_scale, rmse_metric_original_scale
+from .trainer import ModelTrainer
 
 __all__ = [
-    # 'AdvancedEmbeddingModel',
-    # 'mape_metric_original_scale',
-    # 'rmse_metric_original_scale',
-    # 'ModelTrainer',
-    'PyTorchAdvancedEmbeddingModel',
-    'PyTorchModelTrainer',
-    'ModelEvaluator'
-] 
+    'FeatureProcessor',
+    'AdvancedEmbeddingModel', 
+    'mape_metric_original_scale',
+    'rmse_metric_original_scale',
+    'ModelTrainer'
+]

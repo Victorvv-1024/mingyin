@@ -11,9 +11,11 @@ This package contains specialized modules for different types of feature enginee
 from .temporal import TemporalFeatureEngineer
 from .customer_behavior import CustomerBehaviorFeatureEngineer
 from .store_categorization import StoreCategorization
+from .promotional_calendar import ChineseEcommerceCalendar
 
 __all__ = [
     'TemporalFeatureEngineer',
     'CustomerBehaviorFeatureEngineer', 
-    'StoreCategorization'
+    'StoreCategorization',
+    'ChineseEcommerceCalendar'
 ] 
