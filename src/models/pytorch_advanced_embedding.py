@@ -345,7 +345,16 @@ class PyTorchModelTrainer:
             continuous_data = []
             for feature in continuous_features:
                 if feature in df_work.columns:
-                    values = df_work[feature].replace([np.inf, -np.inf], np.nan).fillna(0).values
+                    # Handle different column types
+                    if pd.api.types.is_categorical_dtype(df_work[feature]):
+                        # For categorical columns, convert to numeric codes
+                        values = df_work[feature].cat.codes.values
+                    else:
+                        # For numeric columns, handle inf/nan
+                        values = df_work[feature].replace([np.inf, -np.inf], np.nan)
+                        if not pd.api.types.is_numeric_dtype(values):
+                            values = pd.to_numeric(values, errors='coerce')
+                        values = np.nan_to_num(values, nan=0.0, posinf=1e6, neginf=-1e6)
                     
                     if is_training:
                         # Create quantile-based buckets
@@ -379,6 +388,11 @@ class PyTorchModelTrainer:
                     self.model.scalers['direct'] = RobustScaler()
                     direct_data = self.model.scalers['direct'].fit_transform(direct_data)
                 else:
+                    # If scaler doesn't exist, create a new one and fit it
+                    if 'direct' not in self.model.scalers:
+                        print("Warning: Direct features scaler not found. Creating new scaler...")
+                        self.model.scalers['direct'] = RobustScaler()
+                        self.model.scalers['direct'].fit(direct_data)
                     direct_data = self.model.scalers['direct'].transform(direct_data)
                 
                 prepared_data['direct'] = direct_data

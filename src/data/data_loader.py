@@ -23,5 +23,11 @@ def load_processed_data(data_path: str = None) -> pd.DataFrame:
             'engineered_data.pkl'
         )
     
-    # Load data directly
-    return pd.read_pickle(data_path) 
+    # Create dataset manager
+    dataset_manager = DatasetManager(
+        engineered_data_path=data_path,
+        split_strategy='split_4_test'
+    )
+    
+    # Return the full dataset
+    return dataset_manager.data 

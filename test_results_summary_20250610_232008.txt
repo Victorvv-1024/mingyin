@@ -1,7 +1,0 @@
-MODEL TESTING RESULTS SUMMARY
-==================================================
-
-Test period: 2023 (full year)
-Test samples: 683,818
-Features: 77
-
