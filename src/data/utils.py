@@ -45,6 +45,7 @@ def translate_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
     column_translation = {
         '销售月份': 'sales_month',
+        '一级平台': 'primary_platform',
         '主要平台（原始）': 'primary_platform_original', 
         '二级平台': 'secondary_platform',
         '店铺名称': 'store_name',
