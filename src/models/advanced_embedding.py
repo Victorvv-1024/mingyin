@@ -479,7 +479,7 @@ def main():
         logger.info(f"Dataset loaded: {len(df_final):,} records, {len(features)} features")
         
         # Initialize FIXED model
-        model = FixedAdvancedEmbeddingModel(random_seed=42)
+        model = AdvancedEmbeddingModel(random_seed=42)
         
         # Train with exact notebook parameters
         results = model.train_on_rolling_splits(
