@@ -30,7 +30,7 @@ import numpy as np
 import logging
 
 # Add src to path for imports
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).parent.parent.parent  # Go up to project root from src/scripts/
 sys.path.insert(0, str(project_root / "src"))
 
 # Import model training components

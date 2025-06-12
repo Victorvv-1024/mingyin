@@ -47,7 +47,7 @@ def rmse_metric_original_scale(y_true, y_pred):
     y_pred_orig = tf.clip_by_value(y_pred_orig, 1.0, 1e6)
     return tf.sqrt(tf.reduce_mean(tf.square(y_true_orig - y_pred_orig)))
 
-class AdvancedEmbeddingModel:
+class FixedAdvancedEmbeddingModel:
     """Fixed TensorFlow implementation matching your notebook exactly"""
     
     def __init__(self, random_seed=42):
@@ -404,11 +404,7 @@ class AdvancedEmbeddingModel:
                 'val_r2': val_r2,
                 'epochs_trained': len(history.history['loss']),
                 'best_epoch': np.argmin(history.history['val_mape_metric_original_scale']) + 1,
-                'description': description,
-                # ADD THESE LINES:
-                'train_predictions': train_pred.flatten(),
-                'val_predictions': val_pred.flatten(),
-                'training_history': history.history
+                'description': description
             }
             
             all_results[i] = results
