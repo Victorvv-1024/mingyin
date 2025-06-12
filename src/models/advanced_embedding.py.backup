@@ -180,8 +180,8 @@ class AdvancedEmbeddingModel:
             temporal_embeddings = []
             for i in range(data_shapes['temporal']):
                 # Extract single temporal feature
-                # single_temporal = layers.Lambda(lambda x, idx=i: x[:, idx:idx+1])(temporal_input)
-                single_temporal = tf.gather(temporal_input, [i], axis=1) 
+                single_temporal = layers.Lambda(lambda x, idx=i: x[:, idx:idx+1])(temporal_input)
+                
                 if i == 0:  # Month
                     emb = layers.Embedding(12, 8, name=f'month_embedding')(single_temporal)
                     emb_dim = 8
@@ -214,8 +214,7 @@ class AdvancedEmbeddingModel:
             embedding_dim_per_feature = 8  # Smaller dimension
             
             for i in range(data_shapes['continuous']):
-                # single_continuous = layers.Lambda(lambda x, idx=i: x[:, idx:idx+1])(continuous_input)
-                single_continuous = tf.gather(continuous_input, [i], axis=1) 
+                single_continuous = layers.Lambda(lambda x, idx=i: x[:, idx:idx+1])(continuous_input)
                 emb = layers.Embedding(52, embedding_dim_per_feature, name=f'continuous_{i}_embedding')(single_continuous)
                 emb_flat = layers.Flatten()(emb)
                 continuous_embeddings.append(emb_flat)

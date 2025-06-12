@@ -179,8 +179,7 @@ class FixedModel2023Evaluator:
         # Create the custom objects dictionary with EXACT functions
         custom_objects = {
             'mape_metric_original_scale': mape_metric_original_scale,
-            'rmse_metric_original_scale': rmse_metric_original_scale,
-            'AdamW': AdamW,  # Include the optimizer
+            'rmse_metric_original_scale': rmse_metric_original_scale
         }
         
         # Try different loading strategies
