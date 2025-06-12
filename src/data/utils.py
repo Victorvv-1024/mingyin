@@ -182,6 +182,14 @@ def validate_data_integrity(df: pd.DataFrame) -> Dict[str, any]:
         metrics['zero_values'] = (df[numeric_cols] == 0).sum().to_dict()
         metrics['negative_values'] = (df[numeric_cols] < 0).sum().to_dict()
         
+        # FIXED: Add the missing 'negative_sales' and 'zero_sales' keys
+        if 'sales_quantity' in df.columns:
+            metrics['negative_sales'] = (df['sales_quantity'] < 0).sum()
+            metrics['zero_sales'] = (df['sales_quantity'] == 0).sum()
+        else:
+            metrics['negative_sales'] = 0
+            metrics['zero_sales'] = 0
+        
         # Check for infinite values
         inf_values = {}
         for col in numeric_cols:
@@ -189,6 +197,10 @@ def validate_data_integrity(df: pd.DataFrame) -> Dict[str, any]:
             if inf_count > 0:
                 inf_values[col] = inf_count
         metrics['infinite_values'] = inf_values
+    else:
+        # If no numeric columns, set default values
+        metrics['negative_sales'] = 0
+        metrics['zero_sales'] = 0
     
     # Date column analysis
     date_cols = df.select_dtypes(include=['datetime64']).columns

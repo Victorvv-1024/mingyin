@@ -167,7 +167,10 @@ def validate_feature_engineering_results(engineered_data_path, modeling_features
     logger.info(f"  Final dataset shape: {df_final.shape}")
     logger.info(f"  Total records: {metadata['total_records']:,}")
     
-    if metadata['total_records'] < 1000:  # Sanity check
+    total_records = len(df_final)
+    logger.info(f"  Total records: {total_records:,}")
+
+    if total_records < 1000:  # Sanity check
         logger.warning("⚠️ Dataset seems too small")
         validation_passed = False
     else:

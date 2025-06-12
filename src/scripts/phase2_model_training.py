@@ -29,14 +29,14 @@ import pandas as pd
 import numpy as np
 import logging
 
-# Add src to path for imports
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root / "src"))
+# Add the project root to Python path
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
 
 # Import model training components
-from models.trainer import ModelTrainer
-from data.feature_pipeline import SalesFeaturePipeline
-from utils.helpers import setup_logging
+from src.models.trainer import ModelTrainer
+from src.data.feature_pipeline import SalesFeaturePipeline
+from src.utils.helpers import setup_logging
 
 def parse_arguments():
     """Parse command line arguments for Phase 2."""
