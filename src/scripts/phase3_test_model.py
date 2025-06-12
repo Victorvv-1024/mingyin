@@ -126,9 +126,9 @@ class Model2023Evaluator:
         
         best_models = {}
         
-        # Look for model files with pattern: *split_X_*
+        # Look for model files with pattern: best_model_split_X_*.h5
         for split_num in range(1, 5):  # Splits 1-4
-            pattern = f"*split_{split_num}_*"
+            pattern = f"best_model_split_{split_num}_*.h5"
             model_files = list(self.models_dir.glob(pattern))
             
             if model_files:
@@ -137,10 +137,32 @@ class Model2023Evaluator:
                 best_models[split_num] = str(best_model)
                 self.logger.info(f"  Split {split_num}: {best_model.name}")
             else:
-                self.logger.warning(f"  Split {split_num}: No model found!")
+                # Fallback: try alternative patterns
+                patterns = [
+                    f"model_split_{split_num}_*.h5",
+                    f"*split_{split_num}*.h5", 
+                    f"split_{split_num}_*.h5"
+                ]
+                
+                for pattern in patterns:
+                    model_files = list(self.models_dir.glob(pattern))
+                    if model_files:
+                        best_model = max(model_files, key=lambda x: x.stat().st_mtime)
+                        best_models[split_num] = str(best_model)
+                        self.logger.info(f"  Split {split_num}: {best_model.name} (fallback pattern)")
+                        break
+                
+                if split_num not in best_models:
+                    self.logger.warning(f"  Split {split_num}: No .h5 model found!")
         
         if not best_models:
-            raise FileNotFoundError(f"No model files found in {self.models_dir}")
+            # Debug: show what files are actually in the directory
+            all_files = list(self.models_dir.glob("*"))
+            self.logger.error(f"No .h5 model files found in {self.models_dir}")
+            self.logger.error("Available files:")
+            for file in all_files:
+                self.logger.error(f"  {file.name}")
+            raise FileNotFoundError(f"No .h5 model files found in {self.models_dir}")
         
         self.logger.info(f"Found {len(best_models)} best models")
         return best_models
@@ -174,8 +196,25 @@ class Model2023Evaluator:
         self.logger.info(f"Evaluating Split {split_num} model: {Path(model_path).name}")
         
         try:
-            # Load the model
-            model = tf.keras.models.load_model(model_path, compile=False)
+            # Load the model with safe loading options
+            try:
+                # First try: standard loading
+                model = tf.keras.models.load_model(model_path, compile=False)
+            except Exception as e1:
+                self.logger.warning(f"Standard loading failed: {str(e1)}")
+                try:
+                    # Second try: with safe mode
+                    model = tf.keras.models.load_model(model_path, compile=False, safe_mode=False)
+                except Exception as e2:
+                    self.logger.warning(f"Safe mode loading failed: {str(e2)}")
+                    # Third try: with custom objects
+                    custom_objects = {
+                        'mse': tf.keras.losses.MeanSquaredError(),
+                        'mae': tf.keras.losses.MeanAbsoluteError(),
+                        'adam': tf.keras.optimizers.Adam(),
+                        'rmsprop': tf.keras.optimizers.RMSprop()
+                    }
+                    model = tf.keras.models.load_model(model_path, custom_objects=custom_objects, compile=False)
             
             # Make predictions
             y_pred_log = model.predict(X_test, verbose=0)
