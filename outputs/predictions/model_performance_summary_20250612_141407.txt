@@ -1,0 +1,48 @@
+ADVANCED EMBEDDING MODEL PERFORMANCE SUMMARY
+============================================================
+
+Training completed: 20250612_141407
+Total splits trained: 4
+
+OVERALL PERFORMANCE:
+Average Validation MAPE: 125.68% ± 18.09%
+Best Split MAPE: 106.27%
+Worst Split MAPE: 151.08%
+
+INDIVIDUAL SPLIT PERFORMANCE:
+
+Split 1: 2021_full → 2022_Q1
+  Validation MAPE: 111.09%
+  Validation RMSE: 2212
+  Validation R²: -0.002
+  Training samples: 568,253
+  Validation samples: 154,500
+  Epochs trained: 16
+  Best epoch: 1
+
+Split 2: 2021_full+2022_Q1 → 2022_Q2
+  Validation MAPE: 134.29%
+  Validation RMSE: 3705
+  Validation R²: 0.005
+  Training samples: 722,753
+  Validation samples: 154,500
+  Epochs trained: 16
+  Best epoch: 1
+
+Split 3: 2021_full+2022_Q1Q2 → 2022_Q3
+  Validation MAPE: 151.08%
+  Validation RMSE: 3144
+  Validation R²: 0.002
+  Training samples: 877,253
+  Validation samples: 157,499
+  Epochs trained: 16
+  Best epoch: 1
+
+Split 4: 2021_full+2022_Q1Q2Q3 → 2022_Q4
+  Validation MAPE: 106.27%
+  Validation RMSE: 6047
+  Validation R²: 0.001
+  Training samples: 1,034,752
+  Validation samples: 157,500
+  Epochs trained: 16
+  Best epoch: 1

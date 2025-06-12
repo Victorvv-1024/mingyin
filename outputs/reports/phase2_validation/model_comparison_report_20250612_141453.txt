@@ -1,0 +1,87 @@
+PHASE 2 MODEL TRAINING VALIDATION REPORT
+============================================================
+
+COMPARISON WITH NOTEBOOK RESULTS
+----------------------------------------
+Generated: 20250612_141453
+Experiment: phase2_model_training_20250612_134539
+Expected MAPE: ≤20.0%
+Achieved MAPE: 125.68%
+
+PERFORMANCE COMPARISON
+----------------------------------------
+Overall Grade: POOR
+Consistency: INCONSISTENT
+Business Ready: NO
+Best Split MAPE: 106.27%
+Worst Split MAPE: 151.08%
+
+INDIVIDUAL SPLIT PERFORMANCE
+----------------------------------------
+Split 1: 2021_full → 2022_Q1
+  Validation MAPE: 111.09%
+  Validation RMSE: 2212
+  Validation R²: -0.002
+  Training samples: 568,253
+  Validation samples: 154,500
+
+Split 2: 2021_full+2022_Q1 → 2022_Q2
+  Validation MAPE: 134.29%
+  Validation RMSE: 3705
+  Validation R²: 0.005
+  Training samples: 722,753
+  Validation samples: 154,500
+
+Split 3: 2021_full+2022_Q1Q2 → 2022_Q3
+  Validation MAPE: 151.08%
+  Validation RMSE: 3144
+  Validation R²: 0.002
+  Training samples: 877,253
+  Validation samples: 157,499
+
+Split 4: 2021_full+2022_Q1Q2Q3 → 2022_Q4
+  Validation MAPE: 106.27%
+  Validation RMSE: 6047
+  Validation R²: 0.001
+  Training samples: 1,034,752
+  Validation samples: 157,500
+
+PLATFORM-SPECIFIC PERFORMANCE
+----------------------------------------
+Douyin:
+  Average MAPE: 93.82% ± 5.76%
+  Range: 87.36% - 101.42%
+  Splits analyzed: 4
+
+JD:
+  Average MAPE: 133.43% ± 23.16%
+  Range: 109.76% - 167.74%
+  Splits analyzed: 4
+
+Tmall:
+  Average MAPE: 131.60% ± 52.28%
+  Range: 90.53% - 219.82%
+  Splits analyzed: 4
+
+TRAINING EFFICIENCY
+----------------------------------------
+Average epochs used: 16.0
+Average best epoch: 1.0
+Early stopping rate: 100.0%
+Training stability: 0.000
+
+RECOMMENDATIONS
+----------------------------------------
+• ⚠️ Model performance needs improvement
+• 📋 Consider feature engineering or architecture changes
+• ⚠️ High variance across splits - check for overfitting
+• 📋 Consider regularization or cross-validation
+• 📋 Consider reducing number of epochs for efficiency
+• 📋 Consider platform-specific model tuning
+
+NEXT STEPS
+----------------------------------------
+⚠️ Model needs improvement before production
+1. Review performance issues identified above
+2. Consider tuning hyperparameters or adding features
+3. Re-run training with adjustments

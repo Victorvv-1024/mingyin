@@ -1,0 +1,26 @@
+{
+  "experiment_name": "phase2_model_training_20250612_134539",
+  "timestamp": "20250612_134539",
+  "total_samples": 1192252,
+  "total_features": 316,
+  "rolling_splits": 4,
+  "training_params": {
+    "epochs": 100,
+    "batch_size": 512,
+    "random_seed": 42
+  },
+  "data_info": {
+    "date_range": {
+      "start": "2021-01-01",
+      "end": "2022-12-01"
+    },
+    "platforms": [
+      "Douyin",
+      "JD",
+      "Tmall"
+    ],
+    "stores": 8123,
+    "brands": 3518,
+    "products": 214170
+  }
+}

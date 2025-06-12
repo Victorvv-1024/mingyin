@@ -94,9 +94,9 @@ class ModelConfig:
     
     # Training parameters
     max_epochs: int = 100
-    batch_size: int = 32
+    batch_size: int = 512
     learning_rate: float = 0.001
-    early_stopping_patience: int = 10
+    early_stopping_patience: int = 20
     
     # Model selection
     target_column: str = "sales_quantity"

@@ -1,0 +1,89 @@
+SALES FORECASTING EXPERIMENT REPORT
+============================================================
+
+EXPERIMENT INFORMATION:
+Name: phase2_model_training_20250612_134539
+Timestamp: 20250612_134539
+Random Seed: 42
+
+DATASET INFORMATION:
+Total Samples: 1,192,252
+Total Features: 316
+Date Range: 2021-01-01 to 2022-12-01
+Platforms: Douyin, JD, Tmall
+Unique Stores: 8,123
+Unique Brands: 3,518
+Unique Products: 214,170
+
+PERFORMANCE ASSESSMENT:
+Overall Grade: POOR (Requires significant improvement)
+Consistency: INCONSISTENT
+Average Validation MAPE: 125.68%
+MAPE Standard Deviation: 18.09%
+
+DETAILED PERFORMANCE METRICS:
+Validation MAPE: 125.68% ± 18.09%
+  Range: 106.27% - 151.08%
+Validation RMSE: 3777 ± 1415
+Validation R²: 0.002 ± 0.003
+
+TRAINING EFFICIENCY:
+Average Epochs Used: 16.0
+Average Best Epoch: 1.0
+Early Stopping Rate: 100.0%
+Training Stability: 0.000
+
+PLATFORM PERFORMANCE:
+Douyin: 93.82% ± 5.76%
+JD: 133.43% ± 23.16%
+Tmall: 131.60% ± 52.28%
+
+TOP 10 MOST IMPORTANT FEATURES:
+ 1. store_size_large: 0.5414
+ 2. volatile_performer: 0.4756
+ 3. sales_z_score: 0.4711
+ 4. platform_promo_lift: 0.4584
+ 5. jd_sales_rank: 0.4089
+ 6. month_douyin_interaction: 0.4082
+ 7. sales_deviation_from_ma: 0.4079
+ 8. store_size_small: 0.3335
+ 9. yoy_trend_up: 0.3234
+10. bm_high_volume_retailer: 0.3218
+
+INDIVIDUAL SPLIT PERFORMANCE:
+Split 1: 2021_full → 2022_Q1
+  Validation MAPE: 111.09%
+  Validation RMSE: 2212
+  Validation R²: -0.002
+  Training Samples: 568,253
+  Validation Samples: 154,500
+  Epochs Trained: 16
+  Best Epoch: 1
+
+Split 2: 2021_full+2022_Q1 → 2022_Q2
+  Validation MAPE: 134.29%
+  Validation RMSE: 3705
+  Validation R²: 0.005
+  Training Samples: 722,753
+  Validation Samples: 154,500
+  Epochs Trained: 16
+  Best Epoch: 1
+
+Split 3: 2021_full+2022_Q1Q2 → 2022_Q3
+  Validation MAPE: 151.08%
+  Validation RMSE: 3144
+  Validation R²: 0.002
+  Training Samples: 877,253
+  Validation Samples: 157,499
+  Epochs Trained: 16
+  Best Epoch: 1
+
+Split 4: 2021_full+2022_Q1Q2Q3 → 2022_Q4
+  Validation MAPE: 106.27%
+  Validation RMSE: 6047
+  Validation R²: 0.001
+  Training Samples: 1,034,752
+  Validation Samples: 157,500
+  Epochs Trained: 16
+  Best Epoch: 1
+
