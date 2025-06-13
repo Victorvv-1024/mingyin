@@ -39,6 +39,34 @@ sys.path.insert(0, str(project_root / "src"))
 from data.feature_pipeline import SalesFeaturePipeline
 from utils.helpers import setup_logging
 
+
+class FeatureSliceLayer(layers.Layer):
+    """
+    Custom Keras layer to extract a single feature from input tensor.
+    
+    This replaces the problematic Lambda layer and is fully serializable.
+    Extracts the feature at the specified index while maintaining proper tensor shapes.
+    """
+    
+    def __init__(self, index, **kwargs):
+        super().__init__(**kwargs)
+        self.index = index
+    
+    def call(self, inputs):
+        # Extract single feature at index and expand dims to maintain shape
+        return tf.expand_dims(inputs[:, self.index], axis=1)
+    
+    def get_config(self):
+        """Enable proper serialization"""
+        config = super().get_config()
+        config.update({"index": self.index})
+        return config
+    
+    @classmethod
+    def from_config(cls, config):
+        """Enable proper deserialization"""
+        return cls(**config)
+
 # CRITICAL: Define the EXACT custom functions as they were defined during training
 def mape_metric_original_scale(y_true, y_pred):
     """MAPE metric in original scale for monitoring during training - EXACT COPY"""
@@ -179,32 +207,13 @@ class FixedModel2023Evaluator:
         # Create the custom objects dictionary with EXACT functions
         custom_objects = {
             'mape_metric_original_scale': mape_metric_original_scale,
-            'rmse_metric_original_scale': rmse_metric_original_scale
+            'rmse_metric_original_scale': rmse_metric_original_scale,
+            'FeatureSliceLayer': FeatureSliceLayer  # Add this line
         }
         
-        # Try different loading strategies
-        strategies = [
-            ("Custom objects + compile=False", lambda: tf.keras.models.load_model(
-                model_path, custom_objects=custom_objects, compile=False)),
-            ("Custom objects + compile=True", lambda: tf.keras.models.load_model(
-                model_path, custom_objects=custom_objects, compile=True)),
-            ("No compilation", lambda: tf.keras.models.load_model(
-                model_path, compile=False)),
-        ]
+        model = tf.keras.models.load_model(model_path, custom_objects=custom_objects)
         
-        for strategy_name, load_func in strategies:
-            try:
-                self.logger.debug(f"    Trying: {strategy_name}")
-                model = load_func()
-                self.logger.info(f"    ✅ Success with: {strategy_name}")
-                return model
-            except Exception as e:
-                self.logger.debug(f"    ❌ {strategy_name} failed: {str(e)}")
-                continue
-        
-        # If all strategies fail, provide detailed error info
-        self.logger.error(f"    ❌ All loading strategies failed for {Path(model_path).name}")
-        return None
+        return model
     
     def prepare_features_for_prediction(self, df_2023: pd.DataFrame, features: list):
         """Prepare features for model prediction."""

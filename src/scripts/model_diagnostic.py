@@ -20,10 +20,38 @@ import tensorflow as tf
 import traceback
 import h5py
 import json
+from tensorflow.keras import layers
 
 # Add src to path for imports
 project_root = Path(__file__).parent.parent.parent if len(Path(__file__).parents) > 2 else Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / "src"))
+
+class FeatureSliceLayer(layers.Layer):
+    """
+    Custom Keras layer to extract a single feature from input tensor.
+    
+    This replaces the problematic Lambda layer and is fully serializable.
+    Extracts the feature at the specified index while maintaining proper tensor shapes.
+    """
+    
+    def __init__(self, index, **kwargs):
+        super().__init__(**kwargs)
+        self.index = index
+    
+    def call(self, inputs):
+        # Extract single feature at index and expand dims to maintain shape
+        return tf.expand_dims(inputs[:, self.index], axis=1)
+    
+    def get_config(self):
+        """Enable proper serialization"""
+        config = super().get_config()
+        config.update({"index": self.index})
+        return config
+    
+    @classmethod
+    def from_config(cls, config):
+        """Enable proper deserialization"""
+        return cls(**config)
 
 # Import the exact custom functions
 def mape_metric_original_scale(y_true, y_pred):
