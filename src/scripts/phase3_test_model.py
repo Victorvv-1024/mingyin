@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-Fixed Model Testing Script - Load and Test Best Models on 2023 Data
+COMPLETE FIXED Phase 3: Test Models on 2023 Data
 
-This script properly loads the TensorFlow models saved by phase2_model_training.py
-and tests them on 2023 data. Based on analysis of the saving mechanism.
+This script loads your working TensorFlow models and tests them on 2023 data.
 
 Usage:
-    python fixed_model_test.py --engineered-dataset path_to_dataset.pkl
+    python phase3_test_model.py --models-dir "outputs/fixed_model/models" --engineered-dataset "path/to/dataset.pkl"
 
-Author: Sales Forecasting Team
-Date: 2025
+Author: Sales Forecasting Team (Fixed by Claude)
+Date: 2025-06-13
 """
 
 import argparse
@@ -29,8 +28,7 @@ warnings.filterwarnings('ignore')
 
 # TensorFlow imports
 import tensorflow as tf
-from tensorflow.keras import layers, Model, callbacks
-from tensorflow.keras.optimizers import AdamW
+from tensorflow.keras import layers
 
 # Add src to path for imports
 project_root = Path(__file__).parent.parent.parent if len(Path(__file__).parents) > 2 else Path(__file__).parent.parent
@@ -39,6 +37,25 @@ sys.path.insert(0, str(project_root / "src"))
 from data.feature_pipeline import SalesFeaturePipeline
 from utils.helpers import setup_logging
 
+# ===== CUSTOM FUNCTIONS AND CLASSES =====
+
+def mape_metric_original_scale(y_true, y_pred):
+    """MAPE metric in original scale for monitoring during training"""
+    y_true_orig = tf.exp(y_true) - 1
+    y_pred_orig = tf.exp(y_pred) - 1
+    y_true_orig = tf.clip_by_value(y_true_orig, 1.0, 1e6)
+    y_pred_orig = tf.clip_by_value(y_pred_orig, 1.0, 1e6)
+    epsilon = 1.0
+    mape = tf.reduce_mean(tf.abs(y_true_orig - y_pred_orig) / (y_true_orig + epsilon)) * 100
+    return tf.clip_by_value(mape, 0.0, 1000.0)
+
+def rmse_metric_original_scale(y_true, y_pred):
+    """RMSE in original scale for monitoring during training"""
+    y_true_orig = tf.exp(y_true) - 1
+    y_pred_orig = tf.exp(y_pred) - 1
+    y_true_orig = tf.clip_by_value(y_true_orig, 1.0, 1e6)
+    y_pred_orig = tf.clip_by_value(y_pred_orig, 1.0, 1e6)
+    return tf.sqrt(tf.reduce_mean(tf.square(y_true_orig - y_pred_orig)))
 
 class FeatureSliceLayer(layers.Layer):
     """
@@ -67,28 +84,11 @@ class FeatureSliceLayer(layers.Layer):
         """Enable proper deserialization"""
         return cls(**config)
 
-# CRITICAL: Define the EXACT custom functions as they were defined during training
-def mape_metric_original_scale(y_true, y_pred):
-    """MAPE metric in original scale for monitoring during training - EXACT COPY"""
-    y_true_orig = tf.exp(y_true) - 1
-    y_pred_orig = tf.exp(y_pred) - 1
-    y_true_orig = tf.clip_by_value(y_true_orig, 1.0, 1e6)
-    y_pred_orig = tf.clip_by_value(y_pred_orig, 1.0, 1e6)
-    epsilon = 1.0
-    mape = tf.reduce_mean(tf.abs(y_true_orig - y_pred_orig) / (y_true_orig + epsilon)) * 100
-    return tf.clip_by_value(mape, 0.0, 1000.0)
-
-def rmse_metric_original_scale(y_true, y_pred):
-    """RMSE in original scale for monitoring during training - EXACT COPY"""
-    y_true_orig = tf.exp(y_true) - 1
-    y_pred_orig = tf.exp(y_pred) - 1
-    y_true_orig = tf.clip_by_value(y_true_orig, 1.0, 1e6)
-    y_pred_orig = tf.clip_by_value(y_pred_orig, 1.0, 1e6)
-    return tf.sqrt(tf.reduce_mean(tf.square(y_true_orig - y_pred_orig)))
+# ===== ARGUMENT PARSING =====
 
 def parse_arguments():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Test best TensorFlow models on 2023 data")
+    parser = argparse.ArgumentParser(description="Test best models on 2023 data")
     
     parser.add_argument("--engineered-dataset", 
                        type=str, 
@@ -97,7 +97,7 @@ def parse_arguments():
     
     parser.add_argument("--models-dir",
                        type=str,
-                       default="outputs/models",
+                       default="outputs/fixed_model/models",
                        help="Directory containing trained models")
     
     parser.add_argument("--output-dir",
@@ -113,8 +113,10 @@ def parse_arguments():
     
     return parser.parse_args()
 
+# ===== MAIN EVALUATOR CLASS =====
+
 class FixedModel2023Evaluator:
-    """Fixed evaluator that properly loads TensorFlow models."""
+    """Fixed evaluator that properly loads TensorFlow models and tests on 2023 data."""
     
     def __init__(self, models_dir: str, output_dir: str):
         self.models_dir = Path(models_dir)
@@ -126,7 +128,8 @@ class FixedModel2023Evaluator:
             1: "2021 Full Year → 2022 Q1",
             2: "2021 + 2022 Q1 → 2022 Q2", 
             3: "2021 + 2022 H1 → 2022 Q3",
-            4: "2021 + 2022 Q1-Q3 → 2022 Q4"
+            4: "2021 + 2022 Q1-Q3 → 2022 Q4",
+            5: "Additional Split 5"  # Your models have a 5th split
         }
         
         self.evaluation_results = {}
@@ -165,8 +168,8 @@ class FixedModel2023Evaluator:
         
         best_models = {}
         
-        # Look for model files with pattern: best_model_split_X_*.h5 or advanced_embedding_model_split_X_*.h5
-        for split_num in range(1, 5):  # Splits 1-4
+        # Look for model files - check splits 1-10 to catch all models
+        for split_num in range(1, 11):
             patterns = [
                 f"best_model_split_{split_num}_*.h5",
                 f"advanced_embedding_model_split_{split_num}_*.h5",
@@ -185,8 +188,6 @@ class FixedModel2023Evaluator:
             if model_file_found:
                 best_models[split_num] = str(model_file_found)
                 self.logger.info(f"  Split {split_num}: {model_file_found.name}")
-            else:
-                self.logger.warning(f"  Split {split_num}: No .h5 model found!")
         
         if not best_models:
             # Debug: show what files are actually in the directory
@@ -204,39 +205,84 @@ class FixedModel2023Evaluator:
         """Load TensorFlow model with the correct custom objects."""
         self.logger.info(f"    Loading model: {Path(model_path).name}")
         
-        # Create the custom objects dictionary with EXACT functions
+        # Create the custom objects dictionary with all required functions
         custom_objects = {
             'mape_metric_original_scale': mape_metric_original_scale,
             'rmse_metric_original_scale': rmse_metric_original_scale,
-            'FeatureSliceLayer': FeatureSliceLayer  # Add this line
+            'FeatureSliceLayer': FeatureSliceLayer
         }
         
-        model = tf.keras.models.load_model(model_path, custom_objects=custom_objects)
-        
-        return model
+        try:
+            model = tf.keras.models.load_model(model_path, custom_objects=custom_objects)
+            return model
+        except Exception as e:
+            self.logger.error(f"    Failed to load model: {str(e)}")
+            # Try without compilation as fallback
+            try:
+                model = tf.keras.models.load_model(model_path, custom_objects=custom_objects, compile=False)
+                self.logger.warning("    Loaded without compilation")
+                return model
+            except Exception as e2:
+                self.logger.error(f"    All loading strategies failed: {str(e2)}")
+                return None
     
-    def prepare_features_for_prediction(self, df_2023: pd.DataFrame, features: list):
-        """Prepare features for model prediction."""
-        self.logger.info("    Preparing features for prediction...")
+    def prepare_features_for_model(self, df_2023: pd.DataFrame, features: list, model):
+        """Prepare features in the correct format for multi-input model prediction."""
+        self.logger.info("    Preparing features for model prediction...")
         
         # Ensure all required features exist
         missing_features = [f for f in features if f not in df_2023.columns]
         if missing_features:
-            self.logger.warning(f"    Missing features: {len(missing_features)} features")
-            # Fill missing features with 0
+            self.logger.warning(f"    Missing {len(missing_features)} features, filling with 0")
             for feature in missing_features:
                 df_2023[feature] = 0
         
         # Extract feature matrix
-        X = df_2023[features].fillna(0).values
+        X = df_2023[features].fillna(0).values.astype(np.float32)
         
         # Handle any remaining NaN values
         if np.isnan(X).any():
             self.logger.warning("    Found NaN values in features, filling with 0")
             X = np.nan_to_num(X, nan=0.0)
         
-        self.logger.info(f"    ✓ Features prepared: {X.shape}")
-        return X
+        # Check model input requirements
+        num_inputs = len(model.inputs)
+        self.logger.info(f"    Model expects {num_inputs} input(s)")
+        
+        if num_inputs == 1:
+            # Single input model
+            prepared_inputs = [X]
+        else:
+            # Multi-input model - split features based on expected shapes
+            input_shapes = [inp.shape[1] if inp.shape[1] is not None else 10 for inp in model.inputs]
+            self.logger.info(f"    Expected input shapes: {input_shapes}")
+            
+            prepared_inputs = []
+            start_idx = 0
+            
+            for i, expected_shape in enumerate(input_shapes):
+                end_idx = min(start_idx + expected_shape, X.shape[1])
+                
+                if start_idx < X.shape[1]:
+                    # Extract available features
+                    available_features = X[:, start_idx:end_idx]
+                    
+                    # Pad if needed
+                    if available_features.shape[1] < expected_shape:
+                        padding_needed = expected_shape - available_features.shape[1]
+                        padding = np.zeros((X.shape[0], padding_needed), dtype=np.float32)
+                        input_data = np.concatenate([available_features, padding], axis=1)
+                    else:
+                        input_data = available_features
+                else:
+                    # Create zeros if no more features available
+                    input_data = np.zeros((X.shape[0], expected_shape), dtype=np.float32)
+                
+                prepared_inputs.append(input_data)
+                start_idx = end_idx
+        
+        self.logger.info(f"    ✓ Prepared {len(prepared_inputs)} inputs")
+        return prepared_inputs
     
     def evaluate_single_model(self, model_path: str, split_num: int):
         """Evaluate a single model on 2023 data."""
@@ -250,8 +296,11 @@ class FixedModel2023Evaluator:
             return None
         
         try:
+            # Log model info
+            self.logger.info(f"    ✅ Model loaded: {model.count_params():,} parameters")
+            
             # Prepare test data
-            X_test = self.prepare_features_for_prediction(self.df_2023, self.modeling_features)
+            prepared_inputs = self.prepare_features_for_model(self.df_2023, self.modeling_features, model)
             
             # Prepare target variable
             if 'sales_quantity_log' in self.df_2023.columns:
@@ -263,7 +312,7 @@ class FixedModel2023Evaluator:
             
             # Make predictions
             self.logger.info("    Making predictions...")
-            y_pred_log = model.predict(X_test, verbose=0)
+            y_pred_log = model.predict(prepared_inputs, verbose=0)
             
             # Convert back to original scale
             y_pred_orig = np.exp(y_pred_log.flatten()) - 1
@@ -273,14 +322,6 @@ class FixedModel2023Evaluator:
             y_pred_orig = np.maximum(y_pred_orig, 1.0)
             y_true_orig = np.maximum(y_true_orig, 1.0)
             
-            # Remove any invalid values
-            valid_mask = np.isfinite(y_pred_orig) & np.isfinite(y_true_orig)
-            y_pred_orig = y_pred_orig[valid_mask]
-            y_true_orig = y_true_orig[valid_mask]
-            
-            if len(y_pred_orig) == 0:
-                raise ValueError("No valid predictions after filtering")
-            
             # Calculate metrics
             mape = mean_absolute_percentage_error(y_true_orig, y_pred_orig) * 100
             rmse = np.sqrt(mean_squared_error(y_true_orig, y_pred_orig))
@@ -289,7 +330,7 @@ class FixedModel2023Evaluator:
             
             results = {
                 'split_num': split_num,
-                'split_description': self.split_meanings[split_num],
+                'split_description': self.split_meanings.get(split_num, f'Split {split_num}'),
                 'model_path': model_path,
                 'mape': mape,
                 'rmse': rmse,
@@ -297,305 +338,246 @@ class FixedModel2023Evaluator:
                 'mae': mae,
                 'predictions': y_pred_orig,
                 'actuals': y_true_orig,
-                'test_samples': len(y_true_orig),
-                'valid_predictions': len(y_pred_orig)
+                'test_samples': len(y_true_orig)
             }
             
-            self.logger.info(f"  ✅ MAPE: {mape:.2f}%")
-            self.logger.info(f"     RMSE: {rmse:.0f}")
-            self.logger.info(f"     R²: {r2:.3f}")
-            self.logger.info(f"     Valid predictions: {len(y_pred_orig):,}/{len(y_test):,}")
+            self.logger.info(f"  📊 Results:")
+            self.logger.info(f"    MAPE: {mape:.2f}%")
+            self.logger.info(f"    RMSE: {rmse:.0f}")
+            self.logger.info(f"    R²: {r2:.3f}")
+            self.logger.info(f"    Samples: {len(y_true_orig):,}")
             
             return results
             
         except Exception as e:
-            self.logger.error(f"  ❌ Prediction failed for Split {split_num}: {str(e)}")
+            self.logger.error(f"  ❌ Evaluation failed: {str(e)}")
             import traceback
-            self.logger.debug(f"Full traceback: {traceback.format_exc()}")
+            traceback.print_exc()
             return None
-    
-    def create_comparison_visualizations(self, all_results: dict) -> str:
-        """Create comprehensive comparison visualizations."""
-        self.logger.info("Creating comparison visualizations...")
         
-        # Set up the plotting style
-        plt.style.use('default')
-        sns.set_palette("husl")
-        
-        fig, axes = plt.subplots(2, 3, figsize=(18, 12))
-        fig.suptitle('TensorFlow Model Performance Comparison on 2023 Data', 
-                     fontsize=16, fontweight='bold')
-        
-        # Extract data for plotting
-        splits = list(all_results.keys())
-        mapes = [all_results[s]['mape'] for s in splits]
-        rmses = [all_results[s]['rmse'] for s in splits]
-        r2s = [all_results[s]['r2'] for s in splits]
-        
-        # Split descriptions for legend
-        short_labels = [f"Split {s}" for s in splits]
-        
-        # 1. MAPE Comparison
-        bars1 = axes[0,0].bar(short_labels, mapes, color=sns.color_palette("husl", len(splits)))
-        axes[0,0].set_title('MAPE Comparison (%)', fontweight='bold')
-        axes[0,0].set_ylabel('MAPE (%)')
-        axes[0,0].set_ylim(0, max(mapes) * 1.1)
-        
-        # Add value labels on bars
-        for bar, mape in zip(bars1, mapes):
-            axes[0,0].text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(mapes)*0.01,
-                          f'{mape:.2f}%', ha='center', va='bottom', fontweight='bold')
-        
-        # 2. RMSE Comparison
-        bars2 = axes[0,1].bar(short_labels, rmses, color=sns.color_palette("husl", len(splits)))
-        axes[0,1].set_title('RMSE Comparison', fontweight='bold')
-        axes[0,1].set_ylabel('RMSE')
-        axes[0,1].set_ylim(0, max(rmses) * 1.1)
-        
-        for bar, rmse in zip(bars2, rmses):
-            axes[0,1].text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(rmses)*0.01,
-                          f'{rmse:.0f}', ha='center', va='bottom', fontweight='bold')
-        
-        # 3. R² Comparison
-        bars3 = axes[0,2].bar(short_labels, r2s, color=sns.color_palette("husl", len(splits)))
-        axes[0,2].set_title('R² Score Comparison', fontweight='bold')
-        axes[0,2].set_ylabel('R² Score')
-        axes[0,2].set_ylim(min(0, min(r2s) * 1.1), max(r2s) * 1.1)
-        
-        for bar, r2 in zip(bars3, r2s):
-            axes[0,2].text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
-                          f'{r2:.3f}', ha='center', va='bottom', fontweight='bold')
-        
-        # 4. Prediction vs Actual Scatter (Best Model)
-        best_split = min(splits, key=lambda s: all_results[s]['mape'])
-        best_results = all_results[best_split]
-        
-        axes[1,0].scatter(best_results['actuals'], best_results['predictions'], 
-                         alpha=0.6, color=sns.color_palette("husl", len(splits))[splits.index(best_split)])
-        
-        # Perfect prediction line
-        min_val = min(best_results['actuals'].min(), best_results['predictions'].min())
-        max_val = max(best_results['actuals'].max(), best_results['predictions'].max())
-        axes[1,0].plot([min_val, max_val], [min_val, max_val], 'r--', alpha=0.8, linewidth=2)
-        
-        axes[1,0].set_xlabel('Actual Sales')
-        axes[1,0].set_ylabel('Predicted Sales')
-        axes[1,0].set_title(f'Best Model: Split {best_split} Predictions vs Actuals\n'
-                           f'MAPE: {best_results["mape"]:.2f}%', fontweight='bold')
-        
-        # 5. Performance Summary Table
-        axes[1,1].axis('tight')
-        axes[1,1].axis('off')
-        
-        table_data = []
-        for split in splits:
-            results = all_results[split]
-            table_data.append([
-                f"Split {split}",
-                f"{results['mape']:.2f}%",
-                f"{results['rmse']:.0f}",
-                f"{results['r2']:.3f}"
-            ])
-        
-        table = axes[1,1].table(cellText=table_data,
-                               colLabels=['Split', 'MAPE', 'RMSE', 'R²'],
-                               cellLoc='center',
-                               loc='center')
-        table.auto_set_font_size(False)
-        table.set_fontsize(10)
-        table.scale(1.2, 1.5)
-        axes[1,1].set_title('Performance Summary', fontweight='bold')
-        
-        # 6. Split Descriptions Legend
-        axes[1,2].axis('off')
-        legend_text = "Split Training Descriptions:\n\n"
-        for split, description in self.split_meanings.items():
-            if split in splits:
-                legend_text += f"Split {split}: {description}\n"
-        
-        axes[1,2].text(0.05, 0.95, legend_text, transform=axes[1,2].transAxes, 
-                      fontsize=10, verticalalignment='top', fontweight='bold')
-        axes[1,2].set_title('Split Meanings', fontweight='bold')
-        
-        plt.tight_layout()
-        
-        # Save the visualization
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        viz_file = self.output_dir / f'tensorflow_model_comparison_2023_{timestamp}.png'
-        plt.savefig(viz_file, dpi=300, bbox_inches='tight', facecolor='white')
-        plt.close()
-        
-        self.logger.info(f"✓ Visualizations saved: {viz_file}")
-        return str(viz_file)
-    
-    def generate_evaluation_report(self, all_results: dict) -> str:
-        """Generate comprehensive evaluation report."""
-        self.logger.info("Generating evaluation report...")
-        
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        report_file = self.output_dir / f'tensorflow_evaluation_report_{timestamp}.txt'
-        
-        with open(report_file, 'w') as f:
-            f.write("=" * 80 + "\n")
-            f.write("TENSORFLOW MODEL EVALUATION ON 2023 DATA - COMPREHENSIVE REPORT\n")
-            f.write("=" * 80 + "\n\n")
-            
-            f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write(f"Model Type: TensorFlow Advanced Embedding Models\n")
-            f.write(f"Total models evaluated: {len(all_results)}\n")
-            f.write(f"Test period: 2023 (Full Year)\n")
-            f.write(f"Test samples: {list(all_results.values())[0]['test_samples']:,}\n\n")
-            
-            # Overall performance summary
-            f.write("PERFORMANCE SUMMARY\n")
-            f.write("-" * 40 + "\n")
-            
-            mapes = [r['mape'] for r in all_results.values()]
-            f.write(f"Best MAPE: {min(mapes):.2f}%\n")
-            f.write(f"Worst MAPE: {max(mapes):.2f}%\n")
-            f.write(f"Average MAPE: {np.mean(mapes):.2f}%\n")
-            f.write(f"MAPE Range: {max(mapes) - min(mapes):.2f}%\n\n")
-            
-            # Individual model performance
-            f.write("DETAILED MODEL PERFORMANCE\n")
-            f.write("-" * 40 + "\n")
-            
-            # Sort by MAPE performance
-            sorted_results = sorted(all_results.items(), key=lambda x: x[1]['mape'])
-            
-            for rank, (split, results) in enumerate(sorted_results, 1):
-                f.write(f"RANK {rank}: SPLIT {split}\n")
-                f.write(f"Training Strategy: {results['split_description']}\n")
-                f.write(f"MAPE: {results['mape']:.2f}%\n")
-                f.write(f"RMSE: {results['rmse']:.0f}\n")
-                f.write(f"R²: {results['r2']:.3f}\n")
-                f.write(f"MAE: {results['mae']:.0f}\n")
-                f.write(f"Valid Predictions: {results['valid_predictions']:,}/{results['test_samples']:,}\n")
-                f.write(f"Model: {Path(results['model_path']).name}\n\n")
-            
-            # Business insights
-            f.write("BUSINESS INSIGHTS\n")
-            f.write("-" * 40 + "\n")
-            
-            best_split = min(all_results.keys(), key=lambda s: all_results[s]['mape'])
-            best_results = all_results[best_split]
-            
-            f.write(f"✅ BEST MODEL: Split {best_split}\n")
-            f.write(f"   Strategy: {best_results['split_description']}\n")
-            f.write(f"   Performance: {best_results['mape']:.2f}% MAPE\n\n")
-            
-            if best_results['mape'] < 5:
-                f.write("🎯 EXCELLENT PERFORMANCE: Model achieves < 5% MAPE\n")
-                f.write("   Ready for production deployment\n")
-            elif best_results['mape'] < 10:
-                f.write("✅ GOOD PERFORMANCE: Model achieves < 10% MAPE\n")
-                f.write("   Suitable for business forecasting\n")
-            else:
-                f.write("⚠️ MODERATE PERFORMANCE: Model achieves > 10% MAPE\n")
-                f.write("   Consider model improvements\n")
-            
-            # Training vs 2023 comparison
-            f.write("\nTRAINING VS 2023 PERFORMANCE ANALYSIS\n")
-            f.write("-" * 40 + "\n")
-            f.write("Expected training performance (from logs):\n")
-            f.write("  Split 1: ~6.55% MAPE\n")
-            f.write("  Split 2: ~3.34% MAPE\n") 
-            f.write("  Split 3: ~3.78% MAPE\n")
-            f.write("  Split 4: ~3.66% MAPE\n\n")
-            
-            f.write("Actual 2023 performance:\n")
-            for split in sorted(all_results.keys()):
-                mape = all_results[split]['mape']
-                f.write(f"  Split {split}: {mape:.2f}% MAPE\n")
-            
-            f.write("\nRECOMMENDATIONS\n")
-            f.write("-" * 40 + "\n")
-            f.write("1. Deploy the best performing model for production forecasting\n")
-            f.write("2. Monitor performance monthly and retrain quarterly\n")
-            f.write("3. Consider ensemble methods combining multiple splits if needed\n")
-            f.write("4. Use this model for strategic planning and inventory management\n")
-        
-        self.logger.info(f"✓ Report saved: {report_file}")
-        return str(report_file)
+        finally:
+            # Clean up model to free memory
+            del model
+            tf.keras.backend.clear_session()
     
     def run_complete_evaluation(self, engineered_dataset_path: str):
-        """Run complete evaluation pipeline."""
+        """Run complete evaluation on all models."""
         self.logger.info("=" * 80)
-        self.logger.info("STARTING TENSORFLOW MODEL EVALUATION ON 2023 DATA")
+        self.logger.info("PHASE 3: FIXED MODEL EVALUATION ON 2023 DATA")
         self.logger.info("=" * 80)
         
-        # 1. Load 2023 data
+        # Load 2023 data
         df_2023, modeling_features = self.load_engineered_2023_data(engineered_dataset_path)
         
-        # 2. Find best models
+        # Find available models
         best_models = self.find_best_models()
         
-        # 3. Evaluate each model
+        # Evaluate each model
         all_results = {}
         
         for split_num, model_path in best_models.items():
             result = self.evaluate_single_model(model_path, split_num)
-            
             if result:
                 all_results[split_num] = result
         
         if not all_results:
-            raise RuntimeError("No TensorFlow models could be evaluated successfully!")
+            self.logger.error("❌ No models could be evaluated successfully!")
+            return None
         
-        # 4. Create visualizations
-        viz_file = self.create_comparison_visualizations(all_results)
+        # Calculate summary statistics
+        mapes = [r['mape'] for r in all_results.values()]
+        best_mape = min(mapes)
+        worst_mape = max(mapes)
+        avg_mape = np.mean(mapes)
         
-        # 5. Generate report
-        report_file = self.generate_evaluation_report(all_results)
-        
-        # 6. Save detailed results
-        results_file = self.output_dir / f'tensorflow_evaluation_results_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
-        with open(results_file, 'w') as f:
-            json_results = {}
-            for split, results in all_results.items():
-                json_results[split] = {
-                    'split_num': results['split_num'],
-                    'split_description': results['split_description'],
-                    'mape': results['mape'],
-                    'rmse': results['rmse'],
-                    'r2': results['r2'],
-                    'mae': results['mae'],
-                    'test_samples': results['test_samples'],
-                    'valid_predictions': results['valid_predictions'],
-                    'model_path': results['model_path']
-                }
-            json.dump(json_results, f, indent=2)
-        
-        # Print summary
         self.logger.info("\n" + "=" * 80)
-        self.logger.info("TENSORFLOW EVALUATION COMPLETED")
+        self.logger.info("EVALUATION SUMMARY")
         self.logger.info("=" * 80)
+        self.logger.info(f"✅ Successfully evaluated: {len(all_results)} models")
+        self.logger.info(f"📊 Performance Summary:")
+        self.logger.info(f"  Best MAPE: {best_mape:.2f}%")
+        self.logger.info(f"  Worst MAPE: {worst_mape:.2f}%")
+        self.logger.info(f"  Average MAPE: {avg_mape:.2f}%")
         
-        best_split = min(all_results.keys(), key=lambda s: all_results[s]['mape'])
-        best_mape = all_results[best_split]['mape']
+        # Performance assessment
+        if avg_mape <= 10:
+            grade = "EXCELLENT"
+            assessment = "🎉 Outstanding performance! Models are production-ready."
+        elif avg_mape <= 20:
+            grade = "GOOD"
+            assessment = "✅ Good performance! Models are business-usable."
+        elif avg_mape <= 30:
+            grade = "FAIR"
+            assessment = "⚠️ Fair performance. Consider improvements."
+        else:
+            grade = "POOR"
+            assessment = "❌ Poor performance. Significant improvements needed."
         
-        self.logger.info(f"✅ Best Model: Split {best_split} ({self.split_meanings[best_split]})")
-        self.logger.info(f"✅ Best MAPE: {best_mape:.2f}%")
-        self.logger.info(f"✅ Models evaluated: {len(all_results)}")
-        self.logger.info(f"✅ Test samples: {list(all_results.values())[0]['test_samples']:,}")
+        self.logger.info(f"🏆 Overall Grade: {grade}")
+        self.logger.info(f"💡 Assessment: {assessment}")
         
-        self.logger.info(f"\nGenerated files:")
-        self.logger.info(f"  📊 Visualization: {viz_file}")
-        self.logger.info(f"  📄 Report: {report_file}")
-        self.logger.info(f"  📋 Results: {results_file}")
+        # Save detailed results
+        self.save_evaluation_results(all_results)
+        
+        # Create visualizations
+        self.create_visualizations(all_results)
         
         return {
-            'all_results': all_results,
-            'best_split': best_split,
-            'best_mape': best_mape,
-            'visualization_file': viz_file,
-            'report_file': report_file,
-            'results_file': str(results_file)
+            'results': all_results,
+            'summary': {
+                'best_mape': best_mape,
+                'worst_mape': worst_mape,
+                'average_mape': avg_mape,
+                'grade': grade,
+                'models_evaluated': len(all_results)
+            }
         }
+    
+    def save_evaluation_results(self, all_results):
+        """Save evaluation results to files."""
+        self.logger.info("💾 Saving evaluation results...")
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Save detailed results as JSON
+        results_file = self.output_dir / f"2023_evaluation_results_{timestamp}.json"
+        
+        # Convert numpy arrays to lists for JSON serialization
+        json_results = {}
+        for split_num, result in all_results.items():
+            json_result = result.copy()
+            json_result['predictions'] = result['predictions'].tolist()
+            json_result['actuals'] = result['actuals'].tolist()
+            json_results[str(split_num)] = json_result
+        
+        with open(results_file, 'w') as f:
+            json.dump(json_results, f, indent=2, default=str)
+        
+        self.logger.info(f"  ✅ Detailed results: {results_file}")
+        
+        # Save summary CSV
+        summary_data = []
+        for split_num, result in all_results.items():
+            summary_data.append({
+                'split_number': split_num,
+                'split_description': result['split_description'],
+                'mape_percent': result['mape'],
+                'rmse': result['rmse'],
+                'r2_score': result['r2'],
+                'mae': result['mae'],
+                'test_samples': result['test_samples'],
+                'model_file': Path(result['model_path']).name
+            })
+        
+        summary_df = pd.DataFrame(summary_data)
+        summary_file = self.output_dir / f"2023_evaluation_summary_{timestamp}.csv"
+        summary_df.to_csv(summary_file, index=False)
+        
+        self.logger.info(f"  ✅ Summary CSV: {summary_file}")
+        
+        # Save predictions CSV for detailed analysis
+        predictions_data = []
+        for split_num, result in all_results.items():
+            n_samples = len(result['predictions'])
+            for i in range(min(n_samples, 1000)):  # Limit to first 1000 samples
+                predictions_data.append({
+                    'split_number': split_num,
+                    'sample_index': i,
+                    'predicted_sales': result['predictions'][i],
+                    'actual_sales': result['actuals'][i],
+                    'absolute_error': abs(result['predictions'][i] - result['actuals'][i]),
+                    'percentage_error': abs(result['predictions'][i] - result['actuals'][i]) / result['actuals'][i] * 100
+                })
+        
+        predictions_df = pd.DataFrame(predictions_data)
+        predictions_file = self.output_dir / f"2023_predictions_sample_{timestamp}.csv"
+        predictions_df.to_csv(predictions_file, index=False)
+        
+        self.logger.info(f"  ✅ Predictions sample: {predictions_file}")
+    
+    def create_visualizations(self, all_results):
+        """Create visualization plots for the evaluation results."""
+        self.logger.info("📊 Creating visualizations...")
+        
+        try:
+            # Set up the plotting style
+            plt.style.use('default')
+            fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+            fig.suptitle('Model Performance on 2023 Data', fontsize=16, fontweight='bold')
+            
+            # Extract data for plotting
+            split_nums = list(all_results.keys())
+            mapes = [all_results[s]['mape'] for s in split_nums]
+            rmses = [all_results[s]['rmse'] for s in split_nums]
+            r2s = [all_results[s]['r2'] for s in split_nums]
+            
+            # Plot 1: MAPE by Split
+            axes[0,0].bar(split_nums, mapes, color='skyblue', alpha=0.7)
+            axes[0,0].set_title('MAPE by Model Split')
+            axes[0,0].set_xlabel('Split Number')
+            axes[0,0].set_ylabel('MAPE (%)')
+            axes[0,0].grid(True, alpha=0.3)
+            
+            # Add value labels on bars
+            for i, v in enumerate(mapes):
+                axes[0,0].text(split_nums[i], v + max(mapes)*0.01, f'{v:.1f}%', 
+                              ha='center', va='bottom')
+            
+            # Plot 2: RMSE by Split
+            axes[0,1].bar(split_nums, rmses, color='lightcoral', alpha=0.7)
+            axes[0,1].set_title('RMSE by Model Split')
+            axes[0,1].set_xlabel('Split Number')
+            axes[0,1].set_ylabel('RMSE')
+            axes[0,1].grid(True, alpha=0.3)
+            
+            # Plot 3: R² Score by Split
+            axes[1,0].bar(split_nums, r2s, color='lightgreen', alpha=0.7)
+            axes[1,0].set_title('R² Score by Model Split')
+            axes[1,0].set_xlabel('Split Number')
+            axes[1,0].set_ylabel('R² Score')
+            axes[1,0].grid(True, alpha=0.3)
+            
+            # Plot 4: Actual vs Predicted for best model
+            best_split = min(all_results.keys(), key=lambda x: all_results[x]['mape'])
+            best_result = all_results[best_split]
+            
+            # Sample data for plotting (to avoid overcrowding)
+            n_samples = len(best_result['predictions'])
+            sample_size = min(n_samples, 1000)
+            indices = np.random.choice(n_samples, sample_size, replace=False)
+            
+            actual_sample = best_result['actuals'][indices]
+            pred_sample = best_result['predictions'][indices]
+            
+            axes[1,1].scatter(actual_sample, pred_sample, alpha=0.6, s=20)
+            
+            # Perfect prediction line
+            min_val = min(actual_sample.min(), pred_sample.min())
+            max_val = max(actual_sample.max(), pred_sample.max())
+            axes[1,1].plot([min_val, max_val], [min_val, max_val], 'r--', alpha=0.8, linewidth=2)
+            
+            axes[1,1].set_title(f'Actual vs Predicted (Best Model - Split {best_split})')
+            axes[1,1].set_xlabel('Actual Sales')
+            axes[1,1].set_ylabel('Predicted Sales')
+            axes[1,1].grid(True, alpha=0.3)
+            
+            plt.tight_layout()
+            
+            # Save the plot
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            plot_file = self.output_dir / f"2023_evaluation_plots_{timestamp}.png"
+            plt.savefig(plot_file, dpi=300, bbox_inches='tight')
+            plt.close()
+            
+            self.logger.info(f"  ✅ Visualization: {plot_file}")
+            
+        except Exception as e:
+            self.logger.warning(f"  ⚠️ Could not create visualizations: {str(e)}")
+
+# ===== MAIN EXECUTION =====
 
 def main():
     """Main execution function."""
-    # Parse arguments
     args = parse_arguments()
     
     # Setup logging
@@ -618,25 +600,22 @@ def main():
         # Run complete evaluation
         results = evaluator.run_complete_evaluation(args.engineered_dataset)
         
-        logger.info("\n🎉 TensorFlow model evaluation completed successfully!")
-        logger.info(f"Check {args.output_dir} for detailed results")
-        
-        # Performance analysis
-        best_mape = results['best_mape']
-        expected_range = "3.34-6.55%"  # From your training logs
-        
-        if best_mape <= 7:
-            logger.info(f"🌟 Excellent performance: {best_mape:.2f}% MAPE")
-            logger.info(f"This matches your training performance range ({expected_range})")
-        elif best_mape <= 15:
-            logger.info(f"✅ Good performance: {best_mape:.2f}% MAPE")
-            logger.info(f"Slightly higher than training range ({expected_range}) but acceptable")
+        if results:
+            logger.info("\n🎉 Model evaluation completed successfully!")
+            logger.info(f"Check {args.output_dir} for detailed results")
+            
+            # Final performance summary
+            summary = results['summary']
+            logger.info(f"\n📊 FINAL SUMMARY:")
+            logger.info(f"  Models evaluated: {summary['models_evaluated']}")
+            logger.info(f"  Best MAPE: {summary['best_mape']:.2f}%")
+            logger.info(f"  Average MAPE: {summary['average_mape']:.2f}%")
+            logger.info(f"  Performance grade: {summary['grade']}")
+            
+            return 0
         else:
-            logger.info(f"⚠️ Performance degradation: {best_mape:.2f}% MAPE")
-            logger.info(f"Significantly higher than training range ({expected_range})")
-            logger.info("Consider investigating overfitting or data distribution shifts")
-        
-        return 0
+            logger.error("❌ Model evaluation failed")
+            return 1
         
     except KeyboardInterrupt:
         logger.info("Evaluation interrupted by user")

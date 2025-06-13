@@ -55,12 +55,12 @@ class ModelTrainer:
         logger.info(f"ModelTrainer initialized with output directory: {self.output_dir}")
     
     def train_complete_pipeline(self, 
-                               df_final: pd.DataFrame,
-                               features: List[str],
-                               rolling_splits: List[Tuple],
-                               epochs: int = 100,
-                               batch_size: int = 512,
-                               experiment_name: Optional[str] = None) -> Dict[str, any]:
+                           df_final: pd.DataFrame,
+                           features: List[str],
+                           rolling_splits: List[Tuple],
+                           epochs: int = 100,
+                           batch_size: int = 512,
+                           experiment_name: Optional[str] = None) -> Dict[str, any]:
         """
         Train the complete model pipeline on rolling splits.
         
@@ -117,12 +117,16 @@ class ModelTrainer:
         
         # Train model on rolling splits
         logger.info("Training model on rolling splits...")
+        logger.info(f"Models will be saved to: {self.models_dir}")
+        
+        # CRITICAL FIX: Pass models_dir to the training method
         training_results = self.model.train_on_rolling_splits(
             df_final=df_final,
             features=features,
             rolling_splits=rolling_splits,
             epochs=epochs,
-            batch_size=batch_size
+            batch_size=batch_size,
+            models_dir=str(self.models_dir)  # *** ADD THIS PARAMETER ***
         )
         
         self.training_results = training_results
@@ -140,9 +144,25 @@ class ModelTrainer:
         # Generate final summary
         final_summary = self._generate_final_summary(comprehensive_results)
         
+        # Add model file information to saved_files
+        model_files = {}
+        for split_num, results in training_results.items():
+            if results.get('saved_model_path'):
+                model_files[f'model_split_{split_num}'] = results['saved_model_path']
+        
+        saved_files.update(model_files)
+        
         logger.info("=" * 80)
         logger.info(f"TRAINING PIPELINE COMPLETED: {experiment_name}")
         logger.info("=" * 80)
+        
+        # Log saved models
+        logger.info("MODELS SAVED:")
+        for split_num, results in training_results.items():
+            if results.get('saved_model_path'):
+                logger.info(f"  Split {split_num}: {results.get('model_filename', 'Unknown')}")
+            else:
+                logger.warning(f"  Split {split_num}: ❌ SAVE FAILED")
         
         return {
             'experiment_metadata': self.experiment_metadata,

@@ -333,6 +333,92 @@ class AdvancedEmbeddingModel:
         
         return model
     
+    def save_predictions(self, training_results, df_final, rolling_splits, output_dir):
+        """Save predictions from all training splits"""
+        import os
+        from datetime import datetime
+        
+        saved_files = {}
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Ensure output directory exists
+        os.makedirs(output_dir, exist_ok=True)
+        
+        print(f"💾 Saving predictions to: {output_dir}")
+        
+        for split_num, results in training_results.items():
+            try:
+                # Check if we have predictions in results
+                if 'val_predictions' not in results or 'val_actuals' not in results:
+                    print(f"⚠️ Split {split_num}: No predictions found in results")
+                    continue
+                
+                # Get the validation data for this split
+                if split_num <= len(rolling_splits):
+                    train_df, val_df, description = rolling_splits[split_num - 1]
+                    
+                    # Create predictions DataFrame
+                    predictions_df = val_df.copy()
+                    predictions_df['predicted_sales'] = results['val_predictions']
+                    predictions_df['actual_sales'] = results['val_actuals']
+                    predictions_df['absolute_error'] = np.abs(results['val_predictions'] - results['val_actuals'])
+                    predictions_df['percentage_error'] = (
+                        np.abs(results['val_predictions'] - results['val_actuals']) / 
+                        (results['val_actuals'] + 1.0) * 100
+                    )
+                    
+                    # Add error categories
+                    def categorize_error(ape):
+                        if ape < 5: return "Excellent (<5%)"
+                        elif ape < 10: return "Very Good (5-10%)"
+                        elif ape < 20: return "Good (10-20%)"
+                        elif ape < 50: return "Fair (20-50%)"
+                        else: return "Poor (>50%)"
+                    
+                    predictions_df['error_category'] = predictions_df['percentage_error'].apply(categorize_error)
+                    
+                    # Save predictions
+                    pred_filename = f"predictions_split_{split_num}_{timestamp}.csv"
+                    pred_path = os.path.join(output_dir, pred_filename)
+                    predictions_df.to_csv(pred_path, index=False)
+                    
+                    saved_files[f'predictions_split_{split_num}'] = pred_path
+                    print(f"✅ Split {split_num} predictions saved: {pred_filename}")
+                    
+                else:
+                    print(f"⚠️ Split {split_num}: No rolling split data found")
+                    
+            except Exception as e:
+                print(f"❌ Split {split_num} predictions save failed: {str(e)}")
+                continue
+        
+        # Save summary of all predictions
+        try:
+            summary_data = []
+            for split_num, results in training_results.items():
+                summary_data.append({
+                    'split_number': split_num,
+                    'description': results.get('description', 'N/A'),
+                    'validation_mape': results.get('val_mape', 0),
+                    'validation_rmse': results.get('val_rmse', 0),
+                    'validation_r2': results.get('val_r2', 0),
+                    'validation_samples': results.get('val_samples', 0),
+                    'model_saved': 'Yes' if results.get('saved_model_path') else 'No'
+                })
+            
+            summary_df = pd.DataFrame(summary_data)
+            summary_filename = f"predictions_summary_{timestamp}.csv"
+            summary_path = os.path.join(output_dir, summary_filename)
+            summary_df.to_csv(summary_path, index=False)
+            
+            saved_files['predictions_summary'] = summary_path
+            print(f"✅ Predictions summary saved: {summary_filename}")
+            
+        except Exception as e:
+            print(f"❌ Predictions summary save failed: {str(e)}")
+        
+        return saved_files
+    
     def safe_mape_calculation(self, y_true, y_pred):
         """Safe MAPE calculation"""
         y_true_orig = np.expm1(y_true)
@@ -344,139 +430,335 @@ class AdvancedEmbeddingModel:
         mape = np.mean(ape) * 100
         return min(mape, 1000.0)
     
-    def train_on_rolling_splits(self, df_final, features, rolling_splits, epochs=100, batch_size=512):
-        """Train on rolling splits - TENSORFLOW VERSION"""
+    def train_on_rolling_splits(self, df_final, features, rolling_splits, epochs=100, batch_size=512, models_dir="outputs/models"):
+        """Train on rolling splits with enhanced model saving and debugging"""
         print("=" * 80)
         print("TRAINING TENSORFLOW ADVANCED EMBEDDING MODEL ON ROLLING SPLITS")
         print("=" * 80)
+        
+        # Create models directory with better error handling
+        import os
+        from datetime import datetime
+        
+        try:
+            os.makedirs(models_dir, exist_ok=True)
+            print(f"📁 Models directory created/verified: {models_dir}")
+            
+            # Test write permissions
+            test_file = os.path.join(models_dir, "test_write.tmp")
+            with open(test_file, 'w') as f:
+                f.write("test")
+            os.remove(test_file)
+            print("✅ Write permissions confirmed")
+            
+        except Exception as e:
+            print(f"❌ Models directory setup failed: {str(e)}")
+            # Fallback to current directory
+            models_dir = "."
+            print(f"📁 Using fallback directory: {models_dir}")
         
         # Analyze features
         feature_categories = self.categorize_features_for_embeddings(df_final, features)
         
         all_results = {}
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         for i, (train_df, val_df, description) in enumerate(rolling_splits, 1):
             print(f"\nSplit {i}/{len(rolling_splits)}: {description}")
             print(f"Train: {len(train_df):,} samples, Val: {len(val_df):,} samples")
             
-            # Prepare data
-            X_train, y_train = self.prepare_embedding_features(train_df, feature_categories, is_training=True)
-            X_val, y_val = self.prepare_embedding_features(val_df, feature_categories, is_training=False)
-            
-            print(f"Prepared {len(X_train)} input types for training")
-            
-            # Get data shapes for model creation
-            data_shapes = {key: data.shape[1] for key, data in X_train.items()}
-            print(f"Data shapes: {data_shapes}")
-            
-            # Create model
-            self.model = self.create_advanced_embedding_model(feature_categories, data_shapes)
-            
-            # Prepare inputs in correct order
-            X_train_ordered = [X_train[key] for key in ['temporal', 'continuous', 'direct'] if key in X_train]
-            X_val_ordered = [X_val[key] for key in ['temporal', 'continuous', 'direct'] if key in X_val]
-            
-            # Callbacks (EXACTLY like notebook)
-            callbacks_list = [
-                callbacks.EarlyStopping(
-                    patience=20,  # Notebook used 20
+            try:
+                # Prepare data
+                X_train, y_train = self.prepare_embedding_features(train_df, feature_categories, is_training=True)
+                X_val, y_val = self.prepare_embedding_features(val_df, feature_categories, is_training=False)
+                
+                # Get data shapes for model creation
+                if i == 1:  # First split - determine shapes
+                    self.data_shapes = {}
+                    for key, array in X_train.items():
+                        self.data_shapes[key] = array.shape[1]
+                    print(f"Data shapes determined: {self.data_shapes}")
+                
+                # Create fresh model for this split
+                model = self.create_advanced_embedding_model(feature_categories, self.data_shapes)
+                
+                # Prepare inputs for training
+                train_inputs = []
+                val_inputs = []
+                input_order = ['temporal', 'continuous', 'direct']  # Define consistent order
+                
+                for key in input_order:
+                    if key in X_train:
+                        train_inputs.append(X_train[key])
+                        val_inputs.append(X_val[key])
+                
+                print(f"Prepared {len(train_inputs)} input tensors for training")
+                
+                # Training callbacks
+                from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+                
+                early_stopping = EarlyStopping(
+                    monitor='val_mape_metric_original_scale',
+                    patience=20,
                     restore_best_weights=True,
-                    monitor='val_mape_metric_original_scale',
-                    mode='min'
-                ),
-                callbacks.ReduceLROnPlateau(
-                    patience=10,  # Notebook used 10
-                    factor=0.5,   # Notebook used 0.5
-                    monitor='val_mape_metric_original_scale',
-                    mode='min'
+                    mode='min',
+                    verbose=1
                 )
-            ]
+                
+                reduce_lr = ReduceLROnPlateau(
+                    monitor='val_mape_metric_original_scale',
+                    factor=0.5,
+                    patience=10,
+                    min_lr=1e-6,
+                    mode='min',
+                    verbose=1
+                )
+                
+                callbacks = [early_stopping, reduce_lr]
+                
+                # Train model
+                print("🚀 Starting training...")
+                history = model.fit(
+                    train_inputs, y_train,
+                    validation_data=(val_inputs, y_val),
+                    epochs=epochs,
+                    batch_size=batch_size,
+                    callbacks=callbacks,
+                    verbose=1
+                )
+                
+                print("✅ Training completed")
+                
+                # Make predictions for evaluation
+                train_pred = model.predict(train_inputs, verbose=0)
+                val_pred = model.predict(val_inputs, verbose=0)
+                
+                # Convert to original scale for metrics (with overflow protection)
+                try:
+                    # Use np.clip to prevent overflow in expm1
+                    y_train_clipped = np.clip(y_train, -10, 10)  # Prevent extreme values
+                    y_val_clipped = np.clip(y_val, -10, 10)
+                    train_pred_clipped = np.clip(train_pred.flatten(), -10, 10)
+                    val_pred_clipped = np.clip(val_pred.flatten(), -10, 10)
+                    
+                    train_true_orig = np.expm1(y_train_clipped)
+                    train_pred_orig = np.expm1(train_pred_clipped)
+                    val_true_orig = np.expm1(y_val_clipped)
+                    val_pred_orig = np.expm1(val_pred_clipped)
+                    
+                    # Ensure positive values
+                    train_true_orig = np.maximum(train_true_orig, 1.0)
+                    train_pred_orig = np.maximum(train_pred_orig, 1.0)
+                    val_true_orig = np.maximum(val_true_orig, 1.0)
+                    val_pred_orig = np.maximum(val_pred_orig, 1.0)
+                    
+                except Exception as e:
+                    print(f"⚠️ Overflow in scale conversion: {str(e)}")
+                    # Fallback: use log scale values directly
+                    train_true_orig = np.exp(y_train)
+                    train_pred_orig = np.exp(train_pred.flatten())
+                    val_true_orig = np.exp(y_val)
+                    val_pred_orig = np.exp(val_pred.flatten())
+                
+                # Calculate metrics
+                from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error, r2_score
+                
+                train_mape = mean_absolute_percentage_error(train_true_orig, train_pred_orig) * 100
+                val_mape = mean_absolute_percentage_error(val_true_orig, val_pred_orig) * 100
+                
+                train_rmse = np.sqrt(mean_squared_error(train_true_orig, train_pred_orig))
+                val_rmse = np.sqrt(mean_squared_error(val_true_orig, val_pred_orig))
+                
+                train_r2 = r2_score(train_true_orig, train_pred_orig)
+                val_r2 = r2_score(val_true_orig, val_pred_orig)
+                
+                # *** ENHANCED MODEL SAVING WITH DEBUGGING ***
+                model_filename = f"best_model_split_{i}_{timestamp}.h5"
+                model_path = os.path.join(models_dir, model_filename)
+                
+                print(f"💾 Attempting to save model: {model_path}")
+                
+                saved_model_path = None
+                save_error = None
+                
+                # Try multiple saving strategies
+                strategies = [
+                    ("H5_with_custom_objects", "h5"),
+                    ("H5_basic", "h5"), 
+                    ("SavedModel", "tf")
+                ]
+                
+                for strategy_name, save_format in strategies:
+                    try:
+                        print(f"  Trying {strategy_name} format...")
+                        
+                        if save_format == "h5":
+                            if strategy_name == "H5_with_custom_objects":
+                                # Try with include_optimizer=False to avoid optimizer issues
+                                model.save(model_path, save_format='h5', include_optimizer=False)
+                            else:
+                                # Basic H5 save
+                                model.save(model_path)
+                        else:
+                            # SavedModel format
+                            savedmodel_dir = model_path.replace('.h5', '_savedmodel')
+                            model.save(savedmodel_dir, save_format='tf')
+                            model_path = savedmodel_dir
+                        
+                        print(f"  ✅ {strategy_name} save successful")
+                        
+                        # Test loading immediately
+                        if save_format == "h5":
+                            # Test H5 loading
+                            import tensorflow as tf
+                            custom_objects = {
+                                'mape_metric_original_scale': mape_metric_original_scale,
+                                'rmse_metric_original_scale': rmse_metric_original_scale
+                            }
+                            
+                            # Add FeatureSliceLayer if it exists
+                            try:
+                                custom_objects['FeatureSliceLayer'] = FeatureSliceLayer
+                            except NameError:
+                                pass  # FeatureSliceLayer not defined
+                            
+                            test_model = tf.keras.models.load_model(model_path, custom_objects=custom_objects, compile=False)
+                            print(f"  ✅ {strategy_name} load test passed")
+                            del test_model
+                        else:
+                            # Test SavedModel loading
+                            test_model = tf.keras.models.load_model(model_path, compile=False)
+                            print(f"  ✅ {strategy_name} load test passed")
+                            del test_model
+                        
+                        saved_model_path = model_path
+                        break  # Success, exit loop
+                        
+                    except Exception as e:
+                        print(f"  ❌ {strategy_name} failed: {str(e)}")
+                        save_error = str(e)
+                        continue
+                
+                if not saved_model_path:
+                    print(f"❌ All save strategies failed. Last error: {save_error}")
+                
+                # Store comprehensive results
+                results = {
+                    'split_num': i,
+                    'train_mape': train_mape,
+                    'val_mape': val_mape,
+                    'train_rmse': train_rmse,
+                    'val_rmse': val_rmse,
+                    'train_r2': train_r2,
+                    'val_r2': val_r2,
+                    'epochs_trained': len(history.history['loss']),
+                    'best_epoch': np.argmin(history.history.get('val_mape_metric_original_scale', history.history.get('val_loss', []))) + 1,
+                    'description': description,
+                    'train_samples': len(train_df),
+                    'val_samples': len(val_df),
+                    'saved_model_path': saved_model_path,
+                    'model_filename': model_filename if saved_model_path else None,
+                    'save_error': save_error if not saved_model_path else None,
+                    'training_history': history.history,
+                    'train_predictions': train_pred_orig,
+                    'val_predictions': val_pred_orig,
+                    'train_actuals': train_true_orig,
+                    'val_actuals': val_true_orig
+                }
+                
+                all_results[i] = results
+                
+                print(f"Split {i} Results:")
+                print(f"  Train MAPE: {train_mape:.2f}%, Val MAPE: {val_mape:.2f}%")
+                print(f"  Train RMSE: {train_rmse:.0f}, Val RMSE: {val_rmse:.0f}")
+                print(f"  Train R²: {train_r2:.3f}, Val R²: {val_r2:.3f}")
+                print(f"  Best epoch: {results['best_epoch']}/{results['epochs_trained']}")
+                print(f"  Model saved: {'✅' if saved_model_path else '❌'}")
+                
+                if save_error and not saved_model_path:
+                    print(f"  Save error: {save_error}")
+                
+            except Exception as e:
+                print(f"❌ Split {i} training failed: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                
+                # Store failed result
+                all_results[i] = {
+                    'split_num': i,
+                    'train_mape': 999.0,
+                    'val_mape': 999.0,
+                    'train_rmse': 999999,
+                    'val_rmse': 999999,
+                    'train_r2': -999.0,
+                    'val_r2': -999.0,
+                    'epochs_trained': 0,
+                    'best_epoch': 0,
+                    'description': description,
+                    'train_samples': 0,
+                    'val_samples': 0,
+                    'saved_model_path': None,
+                    'model_filename': None,
+                    'save_error': str(e),
+                    'training_history': {},
+                    'train_predictions': np.array([]),
+                    'val_predictions': np.array([]),
+                    'train_actuals': np.array([]),
+                    'val_actuals': np.array([])
+                }
+                continue
             
-            # Train (EXACTLY like notebook)
-            print("Training TensorFlow advanced embedding model...")
-            history = self.model.fit(
-                X_train_ordered, y_train,
-                validation_data=(X_val_ordered, y_val),
-                epochs=epochs,        # 100 like notebook
-                batch_size=batch_size,  # 512 like notebook
-                callbacks=callbacks_list,
-                verbose=1
-            )
-            
-            # Calculate final metrics
-            train_pred = self.model.predict(X_train_ordered, verbose=0)
-            val_pred = self.model.predict(X_val_ordered, verbose=0)
-            
-            train_mape = self.safe_mape_calculation(y_train, train_pred.flatten())
-            val_mape = self.safe_mape_calculation(y_val, val_pred.flatten())
-            
-            # Convert to original scale for RMSE and R²
-            train_true_orig = np.expm1(y_train)
-            train_pred_orig = np.expm1(train_pred.flatten())
-            val_true_orig = np.expm1(y_val)
-            val_pred_orig = np.expm1(val_pred.flatten())
-            
-            train_rmse = np.sqrt(mean_squared_error(train_true_orig, train_pred_orig))
-            val_rmse = np.sqrt(mean_squared_error(val_true_orig, val_pred_orig))
-            
-            from sklearn.metrics import r2_score
-            train_r2 = r2_score(train_true_orig, train_pred_orig)
-            val_r2 = r2_score(val_true_orig, val_pred_orig)
-            
-            results = {
-                'split_num': i,
-                'train_mape': train_mape,
-                'val_mape': val_mape,
-                'train_rmse': train_rmse,
-                'val_rmse': val_rmse,
-                'train_r2': train_r2,
-                'val_r2': val_r2,
-                'epochs_trained': len(history.history['loss']),
-                'best_epoch': np.argmin(history.history['val_mape_metric_original_scale']) + 1,
-                'description': description,
-                # ADD THESE LINES:
-                'train_predictions': train_pred.flatten(),
-                'val_predictions': val_pred.flatten(),
-                'training_history': history.history
-            }
-            
-            all_results[i] = results
-            
-            print(f"Split {i} Results:")
-            print(f"  Train MAPE: {train_mape:.2f}%, Val MAPE: {val_mape:.2f}%")
-            print(f"  Train RMSE: {train_rmse:.0f}, Val RMSE: {val_rmse:.0f}")
-            print(f"  Train R²: {train_r2:.3f}, Val R²: {val_r2:.3f}")
-            print(f"  Best epoch: {results['best_epoch']}/{results['epochs_trained']}")
-            
-            # Reset model for next split
-            self.model = None
+            finally:
+                # Clear GPU memory for next split
+                import tensorflow as tf
+                tf.keras.backend.clear_session()
+                if 'model' in locals():
+                    del model  # Clean up model reference
         
-        # Print overall performance
+        # Print overall performance summary
         if all_results:
-            val_mapes = [results['val_mape'] for results in all_results.values()]
-            print("\n" + "=" * 80)
-            print("OVERALL PERFORMANCE SUMMARY")
-            print("=" * 80)
-            print(f"Average Validation MAPE: {np.mean(val_mapes):.2f}% ± {np.std(val_mapes):.2f}%")
-            print(f"Best Split MAPE: {np.min(val_mapes):.2f}%")
-            print(f"Worst Split MAPE: {np.max(val_mapes):.2f}%")
+            successful_results = {k: v for k, v in all_results.items() if v['val_mape'] < 900}
             
-            avg_mape = np.mean(val_mapes)
-            if avg_mape <= 15:
-                grade = "EXCELLENT"
-            elif avg_mape <= 20:
-                grade = "GOOD"
-            elif avg_mape <= 30:
-                grade = "FAIR"
+            if successful_results:
+                val_mapes = [results['val_mape'] for results in successful_results.values()]
+                saved_models = [results['saved_model_path'] for results in successful_results.values() if results['saved_model_path']]
+                
+                print("\n" + "=" * 80)
+                print("OVERALL PERFORMANCE SUMMARY")
+                print("=" * 80)
+                print(f"Successful splits: {len(successful_results)}/{len(all_results)}")
+                print(f"Average Validation MAPE: {np.mean(val_mapes):.2f}% ± {np.std(val_mapes):.2f}%")
+                print(f"Best Split MAPE: {np.min(val_mapes):.2f}%")
+                print(f"Worst Split MAPE: {np.max(val_mapes):.2f}%")
+                print(f"Models saved successfully: {len(saved_models)}/{len(all_results)}")
+                
+                # Print saved model paths
+                print(f"\n📁 SAVED MODELS:")
+                for split_num, results in all_results.items():
+                    if results['saved_model_path']:
+                        print(f"  Split {split_num}: {results['model_filename']}")
+                    else:
+                        error_msg = results.get('save_error', 'Unknown error')
+                        print(f"  Split {split_num}: ❌ SAVE FAILED - {error_msg}")
+                
+                avg_mape = np.mean(val_mapes)
+                if avg_mape <= 15:
+                    grade = "EXCELLENT"
+                elif avg_mape <= 20:
+                    grade = "GOOD"
+                elif avg_mape <= 30:
+                    grade = "FAIR"
+                else:
+                    grade = "POOR"
+                
+                print(f"Overall Grade: {grade}")
+                
+                if len(saved_models) == len(all_results):
+                    print("🎉 ALL MODELS SAVED SUCCESSFULLY - Ready for Phase 3!")
+                else:
+                    print("⚠️ Some models failed to save - Check errors above")
             else:
-                grade = "POOR"
-            
-            print(f"Overall Grade: {grade}")
-            print(f"Business Ready: {'YES' if avg_mape <= 20 else 'NO'}")
-        
-        print("=" * 80)
-        print("TENSORFLOW TRAINING COMPLETED")
-        print("=" * 80)
+                print("\n❌ ALL SPLITS FAILED - Check errors above")
         
         return all_results
 

@@ -170,18 +170,22 @@ def run_model_training_pipeline(dataset_path, args, logger):
     logger.info(f"  Rolling splits: {len(rolling_splits)}")
     logger.info(f"  Date range: {metadata['date_range']['start']} to {metadata['date_range']['end']}")
     
-    # Initialize model trainer
-    logger.info("Initializing model trainer...")
-    trainer = ModelTrainer(
-        output_dir=args.output_dir,
-        random_seed=args.random_seed
-    )
-    
     # Generate experiment name if not provided
     experiment_name = args.experiment_name
     if experiment_name is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         experiment_name = f"phase2_model_training_{timestamp}"
+    
+    # Create experiment-specific output directory
+    experiment_output_dir = Path(args.output_dir) / experiment_name
+    
+    # Initialize model trainer with experiment-specific directory
+    logger.info("Initializing model trainer...")
+    logger.info(f"Experiment output directory: {experiment_output_dir}")
+    trainer = ModelTrainer(
+        output_dir=str(experiment_output_dir),
+        random_seed=args.random_seed
+    )
     
     logger.info(f"Experiment name: {experiment_name}")
     logger.info(f"Training parameters:")
@@ -413,10 +417,17 @@ def print_phase2_summary(training_results, validation_passed, args, logger):
         logger.info("2. Consider adjusting training parameters")
         logger.info("3. Check if additional features or tuning needed")
     
-    logger.info(f"\nGenerated outputs:")
+    experiment_output_dir = Path(args.output_dir) / training_results['experiment_metadata']['experiment_name']
+    logger.info(f"\nGenerated outputs in {experiment_output_dir}:")
     for key, filepath in saved_files.items():
         if filepath and filepath != 'N/A':
-            logger.info(f"  {key}: {filepath}")
+            # Show relative path from experiment directory for cleaner display
+            try:
+                rel_path = Path(filepath).relative_to(experiment_output_dir)
+                logger.info(f"  {key}: {rel_path}")
+            except ValueError:
+                # If not relative to experiment dir, show full path
+                logger.info(f"  {key}: {filepath}")
     
     # Performance comparison with notebook
     if args.notebook_mape:

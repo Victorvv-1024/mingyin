@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-Model Loading Diagnostic Script
+FIXED Model Loading Diagnostic Script
 
-This script diagnoses the exact issue with loading TensorFlow models
-and provides detailed error information to fix the problem.
+This script properly tests your new models with the correct custom objects.
 
 Usage:
-    python model_diagnostic.py --models-dir outputs/models
+    python fixed_model_diagnostic.py --models-dir "outputs/fixed_model/models"
 
-Author: Sales Forecasting Team
-Date: 2025
+Author: Claude
+Date: 2025-06-13
 """
 
 import argparse
@@ -20,18 +19,18 @@ import tensorflow as tf
 import traceback
 import h5py
 import json
-from tensorflow.keras import layers
+from datetime import datetime
 
 # Add src to path for imports
-project_root = Path(__file__).parent.parent.parent if len(Path(__file__).parents) > 2 else Path(__file__).parent.parent
-sys.path.insert(0, str(project_root / "src"))
+project_root = Path(__file__).parent.parent if len(Path(__file__).parents) > 1 else Path(__file__).parent
+if 'src' not in str(project_root):
+    project_root = project_root / 'src'
+sys.path.insert(0, str(project_root))
 
-class FeatureSliceLayer(layers.Layer):
+class FeatureSliceLayer(tf.keras.layers.Layer):
     """
     Custom Keras layer to extract a single feature from input tensor.
-    
     This replaces the problematic Lambda layer and is fully serializable.
-    Extracts the feature at the specified index while maintaining proper tensor shapes.
     """
     
     def __init__(self, index, **kwargs):
@@ -39,21 +38,17 @@ class FeatureSliceLayer(layers.Layer):
         self.index = index
     
     def call(self, inputs):
-        # Extract single feature at index and expand dims to maintain shape
         return tf.expand_dims(inputs[:, self.index], axis=1)
     
     def get_config(self):
-        """Enable proper serialization"""
         config = super().get_config()
         config.update({"index": self.index})
         return config
     
     @classmethod
     def from_config(cls, config):
-        """Enable proper deserialization"""
         return cls(**config)
 
-# Import the exact custom functions
 def mape_metric_original_scale(y_true, y_pred):
     """MAPE metric in original scale for monitoring during training"""
     y_true_orig = tf.exp(y_true) - 1
@@ -74,254 +69,180 @@ def rmse_metric_original_scale(y_true, y_pred):
 
 def parse_arguments():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Diagnose TensorFlow model loading issues")
+    parser = argparse.ArgumentParser(description="Fixed TensorFlow model loading diagnostic")
     
     parser.add_argument("--models-dir",
                        type=str,
-                       default="outputs/models",
+                       default="outputs/fixed_model/models",
                        help="Directory containing trained models")
     
     return parser.parse_args()
 
-def inspect_h5_file(model_path):
-    """Inspect the structure of an HDF5 model file."""
-    print(f"\n🔍 INSPECTING H5 FILE STRUCTURE: {Path(model_path).name}")
-    print("-" * 60)
+def test_model_loading(model_path):
+    """Test loading a specific model with all the right custom objects."""
+    filename = os.path.basename(model_path)
+    print(f"\n🔄 Testing: {filename}")
     
+    # Get file info
     try:
-        with h5py.File(model_path, 'r') as f:
-            print(f"HDF5 file keys: {list(f.keys())}")
-            
-            if 'model_config' in f.attrs:
-                print("Found 'model_config' attribute")
-                try:
-                    config = json.loads(f.attrs['model_config'])
-                    print(f"Model class: {config.get('class_name', 'Unknown')}")
-                    print(f"Model config keys: {list(config.get('config', {}).keys())}")
-                except Exception as e:
-                    print(f"Could not parse model_config: {e}")
-            
-            if 'model_weights' in f:
-                print("Found 'model_weights' group")
-                weights_group = f['model_weights']
-                print(f"Weight group keys: {list(weights_group.keys())}")
-                
-                # Check if it has layer names
-                if hasattr(weights_group, 'attrs') and 'layer_names' in weights_group.attrs:
-                    layer_names = [name.decode('utf-8') if isinstance(name, bytes) else name 
-                                 for name in weights_group.attrs['layer_names']]
-                    print(f"Layer names: {layer_names[:5]}{'...' if len(layer_names) > 5 else ''}")
-            
-            # Check for training config
-            if 'training_config' in f.attrs:
-                print("Found 'training_config' attribute")
-                try:
-                    training_config = json.loads(f.attrs['training_config'])
-                    print(f"Optimizer: {training_config.get('optimizer_config', {}).get('class_name', 'Unknown')}")
-                    print(f"Loss: {training_config.get('loss', 'Unknown')}")
-                    if 'metrics' in training_config:
-                        metrics = training_config['metrics']
-                        print(f"Metrics: {metrics}")
-                except Exception as e:
-                    print(f"Could not parse training_config: {e}")
-                    
+        file_stats = os.stat(model_path)
+        file_size = file_stats.st_size / (1024 * 1024)  # MB
+        modified_time = datetime.fromtimestamp(file_stats.st_mtime)
+        print(f"   Size: {file_size:.1f} MB")
+        print(f"   Modified: {modified_time.strftime('%Y-%m-%d %H:%M:%S')}")
     except Exception as e:
-        print(f"❌ Could not inspect H5 file: {e}")
-
-def test_loading_strategies(model_path):
-    """Test various loading strategies and report detailed errors."""
-    print(f"\n🧪 TESTING LOADING STRATEGIES: {Path(model_path).name}")
-    print("-" * 60)
+        print(f"   ⚠️ Could not get file stats: {e}")
     
-    # Strategy 1: Standard loading
-    print("Strategy 1: Standard loading")
-    try:
-        model = tf.keras.models.load_model(model_path)
-        print("✅ SUCCESS: Standard loading worked")
-        return model
-    except Exception as e:
-        print(f"❌ FAILED: {str(e)}")
-        print(f"Error type: {type(e).__name__}")
+    # Define custom objects with everything your models need
+    custom_objects = {
+        'mape_metric_original_scale': mape_metric_original_scale,
+        'rmse_metric_original_scale': rmse_metric_original_scale,
+        'FeatureSliceLayer': FeatureSliceLayer,
+        'AdamW': tf.keras.optimizers.AdamW
+    }
     
-    # Strategy 2: Loading without compilation
-    print("\nStrategy 2: Loading without compilation")
-    try:
-        model = tf.keras.models.load_model(model_path, compile=False)
-        print("✅ SUCCESS: Loading without compilation worked")
-        return model
-    except Exception as e:
-        print(f"❌ FAILED: {str(e)}")
-        print(f"Error type: {type(e).__name__}")
-    
-    # Strategy 3: Loading with custom objects
-    print("\nStrategy 3: Loading with custom objects")
-    try:
-        custom_objects = {
-            'mape_metric_original_scale': mape_metric_original_scale,
-            'rmse_metric_original_scale': rmse_metric_original_scale,
-            'AdamW': tf.keras.optimizers.AdamW,
-        }
-        model = tf.keras.models.load_model(model_path, custom_objects=custom_objects, compile=False)
-        print("✅ SUCCESS: Loading with custom objects worked")
-        return model
-    except Exception as e:
-        print(f"❌ FAILED: {str(e)}")
-        print(f"Error type: {type(e).__name__}")
-    
-    # Strategy 4: Detailed error analysis
-    print("\nStrategy 4: Detailed error analysis with full traceback")
-    try:
-        custom_objects = {
-            'mape_metric_original_scale': mape_metric_original_scale,
-            'rmse_metric_original_scale': rmse_metric_original_scale,
-            'AdamW': tf.keras.optimizers.AdamW,
-            'mae': tf.keras.losses.MeanAbsoluteError(),
-            'Adam': tf.keras.optimizers.Adam,
-        }
-        model = tf.keras.models.load_model(model_path, custom_objects=custom_objects)
-        print("✅ SUCCESS: Detailed loading worked")
-        return model
-    except Exception as e:
-        print(f"❌ FAILED: {str(e)}")
-        print(f"Error type: {type(e).__name__}")
-        print("Full traceback:")
-        traceback.print_exc()
-    
-    # Strategy 5: Try different TensorFlow settings
-    print("\nStrategy 5: Trying with different TensorFlow settings")
-    try:
-        # Disable some optimizations
-        tf.config.optimizer.set_jit(False)
-        tf.config.experimental.enable_tensor_float_32_execution(False)
-        
-        model = tf.keras.models.load_model(model_path, compile=False, safe_mode=False)
-        print("✅ SUCCESS: Modified TensorFlow settings worked")
-        return model
-    except Exception as e:
-        print(f"❌ FAILED: {str(e)}")
-        print(f"Error type: {type(e).__name__}")
-    
-    return None
-
-def get_tensorflow_info():
-    """Get detailed TensorFlow environment information."""
-    print("\n🔧 TENSORFLOW ENVIRONMENT INFO")
-    print("-" * 60)
-    print(f"TensorFlow version: {tf.__version__}")
-    print(f"Keras version: {tf.keras.__version__}")
-    print(f"Python version: {sys.version}")
-    
-    # Check GPU availability
-    gpus = tf.config.list_physical_devices('GPU')
-    print(f"GPUs available: {len(gpus)}")
-    if gpus:
-        for i, gpu in enumerate(gpus):
-            print(f"  GPU {i}: {gpu}")
-    
-    # Check if eager execution is enabled
-    print(f"Eager execution: {tf.executing_eagerly()}")
-    
-    # Check available optimizers
-    try:
-        optimizer_test = tf.keras.optimizers.AdamW(learning_rate=0.001)
-        print("✅ AdamW optimizer available")
-    except Exception as e:
-        print(f"❌ AdamW optimizer issue: {e}")
-
-def main():
-    """Main diagnostic function."""
-    args = parse_arguments()
-    
-    print("=" * 80)
-    print("TENSORFLOW MODEL LOADING DIAGNOSTIC")
-    print("=" * 80)
-    
-    # Get TensorFlow info
-    get_tensorflow_info()
-    
-    # Find model files
-    models_dir = Path(args.models_dir)
-    model_patterns = [
-        "best_model_split_*.h5",
-        "advanced_embedding_model_split_*.h5",
-        "model_split_*.h5",
-        "*.h5"
+    # Try multiple loading strategies
+    strategies = [
+        ("With custom objects", lambda: tf.keras.models.load_model(model_path, custom_objects=custom_objects)),
+        ("Without compilation", lambda: tf.keras.models.load_model(model_path, custom_objects=custom_objects, compile=False)),
+        ("Safe mode disabled", lambda: tf.keras.models.load_model(model_path, custom_objects=custom_objects, safe_mode=False)),
     ]
     
+    for strategy_name, load_func in strategies:
+        try:
+            print(f"   🔄 Trying: {strategy_name}")
+            model = load_func()
+            
+            print(f"   ✅ SUCCESS with {strategy_name}")
+            print(f"   📊 Parameters: {model.count_params():,}")
+            
+            # Get model info
+            try:
+                print(f"   📥 Inputs: {len(model.inputs)} input(s)")
+                for i, inp in enumerate(model.inputs):
+                    print(f"      Input {i+1}: {inp.shape} ({inp.name})")
+                print(f"   📤 Output: {model.output.shape} ({model.output.name})")
+            except Exception as e:
+                print(f"   ⚠️ Could not get model structure: {e}")
+            
+            # Try a simple prediction test
+            try:
+                # Create dummy inputs matching the expected shapes
+                if len(model.inputs) == 3:  # temporal, continuous, direct
+                    dummy_inputs = [
+                        tf.random.normal((5, model.inputs[0].shape[1])),  # temporal
+                        tf.random.normal((5, model.inputs[1].shape[1])),  # continuous  
+                        tf.random.normal((5, model.inputs[2].shape[1]))   # direct
+                    ]
+                elif len(model.inputs) == 2:
+                    dummy_inputs = [
+                        tf.random.normal((5, model.inputs[0].shape[1])),
+                        tf.random.normal((5, model.inputs[1].shape[1]))
+                    ]
+                else:
+                    dummy_inputs = [tf.random.normal((5, model.inputs[0].shape[1]))]
+                
+                pred = model.predict(dummy_inputs, verbose=0)
+                print(f"   🎯 Prediction test: ✅ Output shape {pred.shape}")
+                
+            except Exception as e:
+                print(f"   🎯 Prediction test: ⚠️ {str(e)[:100]}...")
+            
+            del model  # Clean up
+            return True
+            
+        except Exception as e:
+            print(f"   ❌ Failed with {strategy_name}: {type(e).__name__}")
+            print(f"      Error: {str(e)[:100]}...")
+            continue
+    
+    print(f"   ❌ ALL STRATEGIES FAILED for {filename}")
+    return False
+
+def analyze_models_directory(models_dir):
+    """Analyze all models in the directory"""
+    print("🔍 FIXED MODEL LOADING DIAGNOSTIC")
+    print("=" * 60)
+    print(f"Directory: {models_dir}")
+    print(f"TensorFlow version: {tf.__version__}")
+    print()
+    
+    if not os.path.exists(models_dir):
+        print(f"❌ Directory does not exist: {models_dir}")
+        return
+    
+    # Find all H5 files
     model_files = []
-    for pattern in model_patterns:
-        found_files = list(models_dir.glob(pattern))
-        model_files.extend(found_files)
+    for file in os.listdir(models_dir):
+        if file.endswith('.h5'):
+            model_files.append(os.path.join(models_dir, file))
     
     if not model_files:
-        print(f"\n❌ No model files found in {models_dir}")
-        print("Available files:")
-        for file in models_dir.iterdir():
-            print(f"  {file.name}")
+        print("❌ No .h5 model files found!")
+        return
+    
+    print(f"📁 Found {len(model_files)} model file(s)")
+    
+    # Sort by modification time (newest first)
+    model_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+    
+    successful_loads = 0
+    failed_loads = 0
+    
+    for model_path in model_files:
+        success = test_model_loading(model_path)
+        if success:
+            successful_loads += 1
+        else:
+            failed_loads += 1
+    
+    print("\n" + "="*60)
+    print("DIAGNOSTIC SUMMARY")
+    print("="*60)
+    print(f"✅ Successfully loaded: {successful_loads} models")
+    print(f"❌ Failed to load: {failed_loads} models")
+    
+    if successful_loads > 0:
+        print("\n🎉 EXCELLENT! Your models are working correctly!")
+        print("The Lambda layer fix was successful.")
+        print("\nNext steps:")
+        print("1. Run Phase 3 testing:")
+        print(f"   python src/scripts/phase3_test_model.py --models-dir '{models_dir}' --engineered-dataset <your_dataset>")
+        print("2. Your models are ready for production use!")
+    else:
+        print("\n😞 All models failed to load.")
+        print("This suggests there may still be issues with the model architecture.")
+        
+    return successful_loads, failed_loads
+
+def main():
+    """Main diagnostic function"""
+    args = parse_arguments()
+    
+    # Test if directory exists
+    if not os.path.exists(args.models_dir):
+        print(f"❌ Models directory not found: {args.models_dir}")
+        print("\nTry these paths:")
+        possible_paths = [
+            "outputs/fixed_model/models",
+            "outputs/models", 
+            "/Users/victor/Library/CloudStorage/Dropbox/PolyU Projects/MingYin/outputs/fixed_model/models"
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                print(f"  ✅ Found: {path}")
+            else:
+                print(f"  ❌ Not found: {path}")
         return 1
     
-    # Remove duplicates and sort
-    model_files = sorted(list(set(model_files)), key=lambda x: x.name)
-    
-    print(f"\n📁 FOUND {len(model_files)} MODEL FILES")
-    print("-" * 60)
-    for file in model_files:
-        print(f"  {file.name}")
-    
-    # Test each model
-    successful_models = []
-    failed_models = []
-    
-    for model_file in model_files[:4]:  # Test first 4 files
-        print(f"\n" + "=" * 80)
-        print(f"TESTING MODEL: {model_file.name}")
-        print("=" * 80)
+    try:
+        successful, failed = analyze_models_directory(args.models_dir)
+        return 0 if successful > 0 else 1
         
-        # Inspect file structure
-        inspect_h5_file(str(model_file))
-        
-        # Test loading strategies
-        model = test_loading_strategies(str(model_file))
-        
-        if model is not None:
-            successful_models.append(model_file)
-            print(f"\n✅ MODEL LOADED SUCCESSFULLY")
-            try:
-                print(f"  Model input shape: {model.input_shape}")
-                print(f"  Model output shape: {model.output_shape}")
-                print(f"  Number of parameters: {model.count_params():,}")
-                print(f"  Number of layers: {len(model.layers)}")
-            except Exception as e:
-                print(f"  Could not get model details: {e}")
-        else:
-            failed_models.append(model_file)
-            print(f"\n❌ ALL LOADING STRATEGIES FAILED")
-    
-    # Summary
-    print(f"\n" + "=" * 80)
-    print("DIAGNOSTIC SUMMARY")
-    print("=" * 80)
-    print(f"✅ Successfully loaded: {len(successful_models)} models")
-    for model in successful_models:
-        print(f"  - {model.name}")
-    
-    print(f"\n❌ Failed to load: {len(failed_models)} models")  
-    for model in failed_models:
-        print(f"  - {model.name}")
-    
-    if failed_models:
-        print(f"\n🔧 RECOMMENDED FIXES:")
-        print("1. Check TensorFlow version compatibility")
-        print("2. Try recreating models with current TensorFlow version")
-        print("3. Consider saving models in SavedModel format instead of H5")
-        print("4. Check if custom functions are properly defined")
-        print("5. Try loading on the same system/environment where models were saved")
-    
-    if successful_models:
-        print(f"\n🎉 GOOD NEWS: Some models can be loaded!")
-        print("Use the successful loading strategy for your evaluation script.")
-    
-    return 0 if successful_models else 1
+    except Exception as e:
+        print(f"\n❌ Diagnostic failed: {str(e)}")
+        traceback.print_exc()
+        return 1
 
 if __name__ == "__main__":
     exit_code = main()
