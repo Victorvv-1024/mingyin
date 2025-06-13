@@ -140,7 +140,7 @@ class AdvancedEmbeddingModel:
             if temporal_data:
                 prepared_data['temporal'] = np.column_stack(temporal_data)
         
-        # Numerical continuous - bucketize and embed
+        # *** FIX: Numerical continuous - bucketize and embed ***
         continuous_features = feature_categories['numerical_continuous']
         if continuous_features:
             continuous_data = []
@@ -159,7 +159,12 @@ class AdvancedEmbeddingModel:
                     
                     bucket_edges = self.encoders.get(f'{feature}_buckets', np.array([0, 1]))
                     bucket_indices = np.digitize(values, bucket_edges)
-                    bucket_indices = np.clip(bucket_indices, 0, len(bucket_edges))
+                    
+                    # *** CRITICAL FIX: Clip to valid embedding range ***
+                    # np.digitize can return len(bucket_edges), but embedding expects 0 to len(bucket_edges)-1
+                    max_valid_index = 51  # Since we use Embedding(52, ...) which accepts indices 0-51
+                    bucket_indices = np.clip(bucket_indices, 0, max_valid_index)
+                    
                     continuous_data.append(bucket_indices)
             
             if continuous_data:
@@ -167,8 +172,8 @@ class AdvancedEmbeddingModel:
         
         # Direct numerical features
         direct_features = (feature_categories['numerical_discrete'] + 
-                          feature_categories['binary'] + 
-                          feature_categories['interactions'])
+                        feature_categories['binary'] + 
+                        feature_categories['interactions'])
         
         if direct_features:
             existing_features = [f for f in direct_features if f in df_work.columns]

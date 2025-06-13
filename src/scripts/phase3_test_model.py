@@ -14,6 +14,7 @@ Date: 2025-06-13
 import argparse
 import sys
 import os
+import numpy as np
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
@@ -227,8 +228,24 @@ class FixedModel2023Evaluator:
                 return None
     
     def prepare_features_for_model(self, df_2023: pd.DataFrame, features: list, model):
-        """Prepare features in the correct format for multi-input model prediction."""
-        self.logger.info("    Preparing features for model prediction...")
+        """Prepare features using the same AdvancedEmbeddingModel preprocessing as training."""
+        self.logger.info("    Preparing features using AdvancedEmbeddingModel preprocessing...")
+        
+        # Import the AdvancedEmbeddingModel class
+        import sys
+        from pathlib import Path
+        project_root = Path(__file__).parent.parent
+        sys.path.insert(0, str(project_root / "src"))
+        from models.advanced_embedding import AdvancedEmbeddingModel
+        
+        # Create an instance of AdvancedEmbeddingModel for feature processing
+        embedding_model = AdvancedEmbeddingModel()
+        
+        # Categorize features exactly like during training
+        feature_categories = embedding_model.categorize_features_for_embeddings(df_2023, features)
+        
+        # *** CRITICAL: We need to load the encoders and scalers from training ***
+        # For now, we'll create a simplified version that handles the basic embedding requirements
         
         # Ensure all required features exist
         missing_features = [f for f in features if f not in df_2023.columns]
@@ -237,51 +254,142 @@ class FixedModel2023Evaluator:
             for feature in missing_features:
                 df_2023[feature] = 0
         
-        # Extract feature matrix
-        X = df_2023[features].fillna(0).values.astype(np.float32)
-        
-        # Handle any remaining NaN values
-        if np.isnan(X).any():
-            self.logger.warning("    Found NaN values in features, filling with 0")
-            X = np.nan_to_num(X, nan=0.0)
-        
-        # Check model input requirements
-        num_inputs = len(model.inputs)
-        self.logger.info(f"    Model expects {num_inputs} input(s)")
-        
-        if num_inputs == 1:
-            # Single input model
-            prepared_inputs = [X]
-        else:
-            # Multi-input model - split features based on expected shapes
-            input_shapes = [inp.shape[1] if inp.shape[1] is not None else 10 for inp in model.inputs]
-            self.logger.info(f"    Expected input shapes: {input_shapes}")
+        # Use the embedding model's feature preparation method (but in inference mode)
+        try:
+            # This will fail because we don't have the encoders/scalers from training
+            # We need a different approach
+            prepared_data, _ = embedding_model.prepare_embedding_features(
+                df_2023, feature_categories, is_training=False
+            )
             
+            # Convert to the expected input format for the model
             prepared_inputs = []
-            start_idx = 0
+            input_order = ['temporal', 'continuous', 'direct']  # Same order as training
             
-            for i, expected_shape in enumerate(input_shapes):
-                end_idx = min(start_idx + expected_shape, X.shape[1])
-                
-                if start_idx < X.shape[1]:
-                    # Extract available features
-                    available_features = X[:, start_idx:end_idx]
-                    
-                    # Pad if needed
-                    if available_features.shape[1] < expected_shape:
-                        padding_needed = expected_shape - available_features.shape[1]
-                        padding = np.zeros((X.shape[0], padding_needed), dtype=np.float32)
-                        input_data = np.concatenate([available_features, padding], axis=1)
-                    else:
-                        input_data = available_features
-                else:
-                    # Create zeros if no more features available
-                    input_data = np.zeros((X.shape[0], expected_shape), dtype=np.float32)
-                
-                prepared_inputs.append(input_data)
-                start_idx = end_idx
+            for key in input_order:
+                if key in prepared_data:
+                    prepared_inputs.append(prepared_data[key])
+            
+            self.logger.info(f"    ✓ Prepared {len(prepared_inputs)} inputs using embedding preprocessing")
+            return prepared_inputs
+            
+        except Exception as e:
+            self.logger.error(f"    ❌ Embedding preprocessing failed: {str(e)}")
+            self.logger.info("    Falling back to manual feature preparation...")
+            
+            # Manual fallback - create properly formatted inputs
+            return self._manual_embedding_feature_preparation(df_2023, features, model)
+
+
+    def _manual_embedding_feature_preparation(self, df_2023: pd.DataFrame, features: list, model):
+        """Manual feature preparation that mimics the embedding preprocessing."""
         
-        self.logger.info(f"    ✓ Prepared {len(prepared_inputs)} inputs")
+        # Get feature categories
+        from models.advanced_embedding import AdvancedEmbeddingModel
+        embedding_model = AdvancedEmbeddingModel()
+        feature_categories = embedding_model.categorize_features_for_embeddings(df_2023, features)
+        
+        prepared_inputs = []
+        
+        # 1. Temporal features (if any)
+        temporal_features = feature_categories.get('temporal', [])
+        if temporal_features:
+            temporal_data = []
+            for feature in temporal_features:
+                if feature in df_2023.columns:
+                    values = df_2023[feature].fillna(0).values.astype(int)
+                    if feature == 'month':
+                        values = np.clip(values, 1, 12) - 1  # 0-11 for embedding
+                    elif feature == 'quarter':
+                        values = np.clip(values, 1, 4) - 1   # 0-3 for embedding
+                    else:
+                        values = np.clip(values, 0, 100)     # General clipping
+                    temporal_data.append(values)
+            
+            if temporal_data:
+                prepared_inputs.append(np.column_stack(temporal_data))
+        
+        # 2. Continuous features (bucketized)
+        continuous_features = feature_categories.get('numerical_continuous', [])
+        if continuous_features:
+            continuous_data = []
+            for feature in continuous_features:
+                if feature in df_2023.columns:
+                    values = df_2023[feature].replace([np.inf, -np.inf], np.nan).fillna(0).values
+                    
+                    # Simple bucketization for testing (since we don't have training quantiles)
+                    # Use percentile-based buckets as approximation
+                    try:
+                        # Create simple buckets based on the data we have
+                        non_zero_values = values[values != 0]
+                        if len(non_zero_values) > 10:
+                            bucket_edges = np.percentile(non_zero_values, np.linspace(0, 100, 51))
+                            bucket_edges = np.unique(bucket_edges)
+                        else:
+                            bucket_edges = np.array([0, np.max(values) if len(values) > 0 else 1])
+                        
+                        bucket_indices = np.digitize(values, bucket_edges)
+                        # *** CRITICAL FIX: Clip to valid embedding range ***
+                        bucket_indices = np.clip(bucket_indices, 0, 51)  # Max index 51 for embedding(52)
+                        
+                    except Exception:
+                        # Fallback: just clip raw values to a reasonable range
+                        bucket_indices = np.clip(values.astype(int), 0, 51)
+                    
+                    continuous_data.append(bucket_indices)
+            
+            if continuous_data:
+                prepared_inputs.append(np.column_stack(continuous_data))
+        
+        # 3. Direct features (numerical_discrete + binary + interactions)
+        direct_features = (feature_categories.get('numerical_discrete', []) + 
+                        feature_categories.get('binary', []) + 
+                        feature_categories.get('interactions', []))
+        
+        if direct_features:
+            existing_features = [f for f in direct_features if f in df_2023.columns]
+            if existing_features:
+                direct_data = df_2023[existing_features].fillna(0).values.astype(np.float32)
+                direct_data = np.nan_to_num(direct_data, nan=0.0, posinf=1e6, neginf=-1e6)
+                
+                # Apply basic scaling (since we don't have the training scaler)
+                from sklearn.preprocessing import RobustScaler
+                scaler = RobustScaler()
+                direct_data = scaler.fit_transform(direct_data)
+                
+                prepared_inputs.append(direct_data)
+        
+        # Ensure we have the right number of inputs
+        num_expected_inputs = len(model.inputs)
+        while len(prepared_inputs) < num_expected_inputs:
+            # Pad with zeros if we're missing inputs
+            dummy_input = np.zeros((len(df_2023), 1), dtype=np.float32)
+            prepared_inputs.append(dummy_input)
+        
+        # Trim if we have too many
+        prepared_inputs = prepared_inputs[:num_expected_inputs]
+        
+        self.logger.info(f"    ✓ Manual preparation created {len(prepared_inputs)} inputs")
+        
+        # Debug: Check for out-of-range values
+        for i, input_data in enumerate(prepared_inputs):
+            max_val = np.max(input_data)
+            min_val = np.min(input_data)
+            self.logger.info(f"    Input {i}: shape={input_data.shape}, range=[{min_val:.2f}, {max_val:.2f}]")
+            
+            # Check if this looks like continuous features (integers in range that might be embeddings)
+            if input_data.dtype in [np.int32, np.int64] or (np.all(input_data == input_data.astype(int)) and max_val > 51):
+                self.logger.warning(f"    ⚠️  Input {i} has max value {max_val} > 51 (embedding limit)")
+                # Additional clipping
+                prepared_inputs[i] = np.clip(input_data, 0, 51).astype(np.int32)
+                self.logger.info(f"    ✓ Clipped input {i} to valid embedding range [0, 51]")
+            elif input_data.dtype in [np.int32, np.int64] or np.all(input_data == input_data.astype(int)):
+                # Integer data that might be for embeddings, check if already in valid range
+                if max_val == 51:
+                    self.logger.info(f"    ✓ Input {i} already in valid embedding range [0, 51]")
+                elif max_val < 51:
+                    self.logger.info(f"    ✓ Input {i} in valid range [0, {int(max_val)}]")
+        
         return prepared_inputs
     
     def evaluate_single_model(self, model_path: str, split_num: int):

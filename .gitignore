@@ -94,6 +94,15 @@ outputs/models/
 *.pth
 *.model
 
+# Large output files and results
+outputs/*/predictions/
+outputs/*/results/
+outputs/2023_evaluation_results/
+outputs/fixed_model/predictions/
+*evaluation_results*.json
+*predictions*.csv
+*detailed_predictions*.csv
+
 # Large files
 *.zip
 *.tar.gz
