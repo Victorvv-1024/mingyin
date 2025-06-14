@@ -14,6 +14,7 @@ import logging
 from pathlib import Path
 
 from .advanced_embedding import AdvancedEmbeddingModel
+from .enhanced_model import EnhancedEmbeddingModel
 from .feature_processor import FeatureProcessor
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,8 @@ class ModelTrainer:
             directory.mkdir(parents=True, exist_ok=True)
         
         # Initialize components
-        self.model = AdvancedEmbeddingModel(random_seed=random_seed)
+        # self.model = AdvancedEmbeddingModel(random_seed=random_seed)
+        self.model = EnhancedEmbeddingModel(random_seed=random_seed)
         self.training_results = {}
         self.experiment_metadata = {}
         
@@ -59,7 +61,7 @@ class ModelTrainer:
                            features: List[str],
                            rolling_splits: List[Tuple],
                            epochs: int = 100,
-                           batch_size: int = 512,
+                           batch_size: int = 256,
                            experiment_name: Optional[str] = None) -> Dict[str, any]:
         """
         Train the complete model pipeline on rolling splits.

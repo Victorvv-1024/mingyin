@@ -236,10 +236,12 @@ class FixedModel2023Evaluator:
         from pathlib import Path
         project_root = Path(__file__).parent.parent
         sys.path.insert(0, str(project_root / "src"))
-        from models.advanced_embedding import AdvancedEmbeddingModel
+        # from models.advanced_embedding import AdvancedEmbeddingModel
+        from models.enhanced_model import EnhancedEmbeddingModel
         
         # Create an instance of AdvancedEmbeddingModel for feature processing
-        embedding_model = AdvancedEmbeddingModel()
+        # embedding_model = AdvancedEmbeddingModel()
+        embedding_model = EnhancedEmbeddingModel()
         
         # Categorize features exactly like during training
         feature_categories = embedding_model.categorize_features_for_embeddings(df_2023, features)
@@ -285,8 +287,9 @@ class FixedModel2023Evaluator:
         """Manual feature preparation that mimics the embedding preprocessing."""
         
         # Get feature categories
-        from models.advanced_embedding import AdvancedEmbeddingModel
-        embedding_model = AdvancedEmbeddingModel()
+        # from models.advanced_embedding import AdvancedEmbeddingModel
+        from models.enhanced_model import EnhancedEmbeddingModel
+        embedding_model = EnhancedEmbeddingModel()
         feature_categories = embedding_model.categorize_features_for_embeddings(df_2023, features)
         
         prepared_inputs = []
