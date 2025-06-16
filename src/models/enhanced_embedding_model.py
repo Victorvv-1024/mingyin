@@ -595,13 +595,31 @@ class EnhancedEmbeddingModel:
         return all_results
     
     def _save_model_with_fallbacks(self, model, model_save_path, split_num, timestamp, val_mape):
-        """Enhanced model saving with multiple fallback strategies (fixes Lambda issues)"""
+        """Enhanced model saving with multiple fallback strategies (fixes Lambda issues) + saves encoders/scalers"""
         import os
+        import pickle
         
         # Create final filename with actual MAPE value (using .keras format for Keras 3)
         base_dir = os.path.dirname(model_save_path)
         final_filename = f'best_model_split_{split_num}_epoch_999_mape_{val_mape:.2f}_{timestamp}.keras'
         final_model_path = os.path.join(base_dir, final_filename)
+        
+        # FIRST: Save encoders and scalers (CRITICAL FOR INFERENCE!)
+        encoders_scalers_path = os.path.join(base_dir, f'encoders_scalers_split_{split_num}.pkl')
+        try:
+            encoders_scalers_data = {
+                'encoders': self.encoders,
+                'scalers': self.scalers,
+                'split_num': split_num,
+                'timestamp': timestamp,
+                'val_mape': val_mape
+            }
+            with open(encoders_scalers_path, 'wb') as f:
+                pickle.dump(encoders_scalers_data, f)
+            print(f"      ✅ Encoders/scalers saved: {encoders_scalers_path}")
+        except Exception as e:
+            print(f"      ❌ Failed to save encoders/scalers: {str(e)[:100]}")
+            # This is critical - if we can't save encoders, inference will fail
         
         # Strategy 1: Native Keras format (recommended for Keras 3)
         try:

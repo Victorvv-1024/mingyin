@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """
-COMPLETE FIXED Phase 3: Test Models on 2023 Data
+Phase 3: Test Enhanced Models on 2023 Data
 
-This script loads your working TensorFlow models and tests them on 2023 data.
+This script loads trained TensorFlow models and evaluates them on 2023 data with
+proper preprocessing consistency. Features include:
+- Proper loading of training encoders/scalers for consistent preprocessing
+- Maintains embedding vocabulary sizes and bucket counts from training
+- Clean visualization generation for performance analysis
 
 Usage:
-    python phase3_test_model.py --models-dir "outputs/phase2_experiment_20250113/models" --engineered-dataset "path/to/dataset.pkl"
-    
-Results will be automatically saved to: outputs/phase2_experiment_20250113/2023_evaluation/
-
-Author: Sales Forecasting Team (Fixed by Claude)
-Date: 2025-06-13
+    python phase3_test_model.py --models-dir "outputs/enhanced-model/models" --engineered-dataset "path/to/dataset.pkl"
 """
 
 import argparse
@@ -27,6 +26,7 @@ from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error, 
 import logging
 import json
 import warnings
+import pickle
 warnings.filterwarnings('ignore')
 
 # TensorFlow imports
@@ -39,48 +39,15 @@ sys.path.insert(0, str(project_root / "src"))
 
 from data.feature_pipeline import SalesFeaturePipeline
 from utils.helpers import setup_logging
-
-# ===== CUSTOM FUNCTIONS AND CLASSES =====
-
-# Import shared custom objects
 from models.custom_objects import get_custom_objects
 
-# ===== ARGUMENT PARSING =====
-
-def parse_arguments():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Test best models on 2023 data")
-    
-    parser.add_argument("--engineered-dataset", 
-                       type=str, 
-                       required=True,
-                       help="Path to engineered dataset pickle file")
-    
-    parser.add_argument("--models-dir",
-                       type=str,
-                       default="outputs/fixed_model/models",
-                       help="Directory containing trained models")
-    
-    parser.add_argument("--log-level",
-                       type=str,
-                       default="INFO",
-                       choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-                       help="Logging level")
-    
-    return parser.parse_args()
-
-# ===== MAIN EVALUATOR CLASS =====
-
-class FixedModel2023Evaluator:
-    """Fixed evaluator that properly loads TensorFlow models and tests on 2023 data."""
+class Model2023Evaluator:
+    """Enhanced model evaluator that loads training encoders/scalers for consistent preprocessing."""
     
     def __init__(self, models_dir: str):
         self.models_dir = Path(models_dir)
         
-        # ✅ FIX: Auto-determine output directory from models directory structure
-        # Follow the same pattern as Phase 2: {experiment-dir}/2023_evaluation/
-        # If models_dir is: outputs/phase2_experiment_20250113/models
-        # Then output_dir is: outputs/phase2_experiment_20250113/2023_evaluation/
+        # Auto-determine output directory
         experiment_dir = self.models_dir.parent
         self.output_dir = experiment_dir / "2023_evaluation"
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -91,11 +58,15 @@ class FixedModel2023Evaluator:
             2: "2021 + 2022 Q1 → 2022 Q2", 
             3: "2021 + 2022 H1 → 2022 Q3",
             4: "2021 + 2022 Q1-Q3 → 2022 Q4",
-            5: "Additional Split 5"  # Your models have a 5th split
+            5: "2021 + 2022 Full → 2023 Q1"
         }
         
         self.evaluation_results = {}
         self.logger = logging.getLogger(__name__)
+        
+        # Storage for loaded training encoders/scalers
+        self.training_encoders = {}
+        self.training_scalers = {}
     
     def load_engineered_2023_data(self, engineered_dataset_path: str):
         """Load 2023 data from the engineered dataset."""
@@ -133,9 +104,13 @@ class FixedModel2023Evaluator:
         # Look for model files - check splits 1-10 to catch all models
         for split_num in range(1, 11):
             patterns = [
+                f"best_model_split_{split_num}_*.keras",
                 f"best_model_split_{split_num}_*.h5",
+                f"advanced_embedding_model_split_{split_num}_*.keras",
                 f"advanced_embedding_model_split_{split_num}_*.h5",
+                f"model_split_{split_num}_*.keras",
                 f"model_split_{split_num}_*.h5",
+                f"*split_{split_num}*.keras",
                 f"*split_{split_num}*.h5"
             ]
             
@@ -143,8 +118,14 @@ class FixedModel2023Evaluator:
             for pattern in patterns:
                 model_files = list(self.models_dir.glob(pattern))
                 if model_files:
-                    # Choose the most recent model file
-                    model_file_found = max(model_files, key=lambda x: x.stat().st_mtime)
+                    # Filter out models with epoch_000 (initial checkpoints) and prefer models with higher MAPE values
+                    valid_models = [f for f in model_files if "epoch_000" not in f.name or "mape_00.00" not in f.name]
+                    if valid_models:
+                        # Choose the model with the highest MAPE in filename (indicates trained model)
+                        model_file_found = max(valid_models, key=lambda x: x.stat().st_mtime)
+                    else:
+                        # Fallback to most recent if no valid models
+                        model_file_found = max(model_files, key=lambda x: x.stat().st_mtime)
                     break
             
             if model_file_found:
@@ -154,14 +135,75 @@ class FixedModel2023Evaluator:
         if not best_models:
             # Debug: show what files are actually in the directory
             all_files = list(self.models_dir.glob("*"))
-            self.logger.error(f"No .h5 model files found in {self.models_dir}")
+            self.logger.error(f"No model files (.h5 or .keras) found in {self.models_dir}")
             self.logger.error("Available files:")
             for file in all_files[:10]:  # Show first 10 files
                 self.logger.error(f"  {file.name}")
-            raise FileNotFoundError(f"No .h5 model files found in {self.models_dir}")
+            raise FileNotFoundError(f"No model files (.h5 or .keras) found in {self.models_dir}")
         
         self.logger.info(f"Found {len(best_models)} TensorFlow models")
         return best_models
+    
+    def load_training_encoders_scalers(self, split_num: int):
+        """
+        Load the training encoders and scalers for a specific split.
+        
+        This is the KEY FIX: We need to recreate the exact same preprocessing
+        that was used during training for this specific split.
+        """
+        self.logger.info(f"    Loading training encoders/scalers for Split {split_num}...")
+        
+        # Try to find saved encoders/scalers file
+        encoders_file = self.models_dir / f"encoders_scalers_split_{split_num}.pkl"
+        
+        if encoders_file.exists():
+            self.logger.info(f"    Found saved encoders: {encoders_file}")
+            with open(encoders_file, 'rb') as f:
+                saved_data = pickle.load(f)
+                self.training_encoders = saved_data.get('encoders', {})
+                self.training_scalers = saved_data.get('scalers', {})
+            return True
+        else:
+            self.logger.warning(f"    No saved encoders found: {encoders_file}")
+            self.logger.warning("    Will need to reconstruct from training data...")
+            return False
+    
+    def reconstruct_training_preprocessing(self, split_num: int):
+        """Reconstruct training preprocessing to get the exact encoders/scalers used."""
+        self.logger.info(f"    Reconstructing training preprocessing for Split {split_num}...")
+        
+        from models.enhanced_embedding_model import EnhancedEmbeddingModel
+        
+        # Create a model instance
+        enhanced_model = EnhancedEmbeddingModel()
+        
+        # Load the full dataset to get training data for this split
+        feature_pipeline = SalesFeaturePipeline()
+        df_final, modeling_features, rolling_splits, metadata = feature_pipeline.load_engineered_dataset(
+            "data/engineered/sales_forecast_engineered_dataset_20250612_164550.pkl"
+        )
+        
+        # Get the specific training split
+        if split_num <= len(rolling_splits):
+            train_df, val_df, description = rolling_splits[split_num - 1]
+            
+            # Recreate the feature categories and preprocessing
+            feature_categories = enhanced_model.categorize_features_for_embeddings(df_final, modeling_features)
+            
+            # Run the training preprocessing to build encoders/scalers
+            X_train, y_train = enhanced_model.prepare_embedding_features(
+                train_df, feature_categories, is_training=True
+            )
+            
+            # Store the encoders/scalers
+            self.training_encoders = enhanced_model.encoders.copy()
+            self.training_scalers = enhanced_model.scalers.copy()
+            
+            self.logger.info(f"    ✓ Reconstructed {len(self.training_encoders)} encoders and {len(self.training_scalers)} scalers")
+            return True
+        else:
+            self.logger.error(f"    Split {split_num} not found in rolling splits")
+            return False
     
     def load_tensorflow_model_properly(self, model_path: str):
         """Load TensorFlow model with the correct custom objects."""
@@ -171,6 +213,8 @@ class FixedModel2023Evaluator:
         custom_objects = get_custom_objects()
         
         try:
+            # Enable unsafe deserialization for lambda functions
+            tf.keras.config.enable_unsafe_deserialization()
             model = tf.keras.models.load_model(model_path, custom_objects=custom_objects)
             return model
         except Exception as e:
@@ -184,27 +228,23 @@ class FixedModel2023Evaluator:
                 self.logger.error(f"    All loading strategies failed: {str(e2)}")
                 return None
     
-    def prepare_features_for_model(self, df_2023: pd.DataFrame, features: list, model):
-        """Prepare features using the same AdvancedEmbeddingModel preprocessing as training."""
-        self.logger.info("    Preparing features using AdvancedEmbeddingModel preprocessing...")
+    def prepare_features_with_training_preprocessing(self, df_2023: pd.DataFrame, features: list):
+        """
+        FIXED: Prepare features using the EXACT same preprocessing as training.
         
-        # Import the AdvancedEmbeddingModel class
-        import sys
-        from pathlib import Path
-        project_root = Path(__file__).parent.parent
-        sys.path.insert(0, str(project_root / "src"))
-        # from models.vanilla_embedding_model import VanillaEmbeddingModel
+        This is the core fix that ensures consistency between training and inference.
+        """
+        self.logger.info("    Preparing features with training preprocessing...")
+        
         from models.enhanced_embedding_model import EnhancedEmbeddingModel
         
-        # Create an instance of AdvancedEmbeddingModel for feature processing
-        # embedding_model = AdvancedEmbeddingModel()
-        embedding_model = EnhancedEmbeddingModel()
+        # Create model instance with the loaded training encoders/scalers
+        enhanced_model = EnhancedEmbeddingModel()
+        enhanced_model.encoders = self.training_encoders
+        enhanced_model.scalers = self.training_scalers
         
         # Categorize features exactly like during training
-        feature_categories = embedding_model.categorize_features_for_embeddings(df_2023, features)
-        
-        # *** CRITICAL: We need to load the encoders and scalers from training ***
-        # For now, we'll create a simplified version that handles the basic embedding requirements
+        feature_categories = enhanced_model.categorize_features_for_embeddings(df_2023, features)
         
         # Ensure all required features exist
         missing_features = [f for f in features if f not in df_2023.columns]
@@ -213,147 +253,36 @@ class FixedModel2023Evaluator:
             for feature in missing_features:
                 df_2023[feature] = 0
         
-        # Use the embedding model's feature preparation method (but in inference mode)
+        # Use the SAME preprocessing as training (is_training=False uses saved encoders/scalers)
         try:
-            # This will fail because we don't have the encoders/scalers from training
-            # We need a different approach
-            prepared_data, _ = embedding_model.prepare_embedding_features(
+            prepared_data, _ = enhanced_model.prepare_embedding_features(
                 df_2023, feature_categories, is_training=False
             )
             
             # Convert to the expected input format for the model
             prepared_inputs = []
-            input_order = ['temporal', 'continuous', 'direct']  # Same order as training
+            input_order = ['temporal', 'continuous', 'direct']
             
             for key in input_order:
                 if key in prepared_data:
                     prepared_inputs.append(prepared_data[key])
             
-            self.logger.info(f"    ✓ Prepared {len(prepared_inputs)} inputs using embedding preprocessing")
+            self.logger.info(f"    ✓ Prepared {len(prepared_inputs)} inputs using TRAINING preprocessing")
+            
+            # Log preprocessing details for verification
+            for i, input_data in enumerate(prepared_inputs):
+                max_val = np.max(input_data)
+                min_val = np.min(input_data)
+                self.logger.info(f"    Input {i}: shape={input_data.shape}, range=[{min_val:.2f}, {max_val:.2f}]")
+            
             return prepared_inputs
             
         except Exception as e:
-            self.logger.error(f"    ❌ Embedding preprocessing failed: {str(e)}")
-            self.logger.info("    Falling back to manual feature preparation...")
-            
-            # Manual fallback - create properly formatted inputs
-            return self._manual_embedding_feature_preparation(df_2023, features, model)
-
-
-    def _manual_embedding_feature_preparation(self, df_2023: pd.DataFrame, features: list, model):
-        """Manual feature preparation that mimics the embedding preprocessing."""
-        
-        # Get feature categories
-        # from models.vanilla_embedding_model import VanillaEmbeddingModel
-        from models.enhanced_embedding_model import EnhancedEmbeddingModel
-        embedding_model = EnhancedEmbeddingModel()
-        feature_categories = embedding_model.categorize_features_for_embeddings(df_2023, features)
-        
-        prepared_inputs = []
-        
-        # 1. Temporal features (if any)
-        temporal_features = feature_categories.get('temporal', [])
-        if temporal_features:
-            temporal_data = []
-            for feature in temporal_features:
-                if feature in df_2023.columns:
-                    values = df_2023[feature].fillna(0).values.astype(int)
-                    if feature == 'month':
-                        values = np.clip(values, 1, 12) - 1  # 0-11 for embedding
-                    elif feature == 'quarter':
-                        values = np.clip(values, 1, 4) - 1   # 0-3 for embedding
-                    else:
-                        values = np.clip(values, 0, 100)     # General clipping
-                    temporal_data.append(values)
-            
-            if temporal_data:
-                prepared_inputs.append(np.column_stack(temporal_data))
-        
-        # 2. Continuous features (bucketized)
-        continuous_features = feature_categories.get('numerical_continuous', [])
-        if continuous_features:
-            continuous_data = []
-            for feature in continuous_features:
-                if feature in df_2023.columns:
-                    values = df_2023[feature].replace([np.inf, -np.inf], np.nan).fillna(0).values
-                    
-                    # Simple bucketization for testing (since we don't have training quantiles)
-                    # Use percentile-based buckets as approximation
-                    try:
-                        # Create simple buckets based on the data we have
-                        non_zero_values = values[values != 0]
-                        if len(non_zero_values) > 10:
-                            bucket_edges = np.percentile(non_zero_values, np.linspace(0, 100, 51))
-                            bucket_edges = np.unique(bucket_edges)
-                        else:
-                            bucket_edges = np.array([0, np.max(values) if len(values) > 0 else 1])
-                        
-                        bucket_indices = np.digitize(values, bucket_edges)
-                        # *** CRITICAL FIX: Clip to valid embedding range ***
-                        bucket_indices = np.clip(bucket_indices, 0, 51)  # Max index 51 for embedding(52)
-                        
-                    except Exception:
-                        # Fallback: just clip raw values to a reasonable range
-                        bucket_indices = np.clip(values.astype(int), 0, 51)
-                    
-                    continuous_data.append(bucket_indices)
-            
-            if continuous_data:
-                prepared_inputs.append(np.column_stack(continuous_data))
-        
-        # 3. Direct features (numerical_discrete + binary + interactions)
-        direct_features = (feature_categories.get('numerical_discrete', []) + 
-                        feature_categories.get('binary', []) + 
-                        feature_categories.get('interactions', []))
-        
-        if direct_features:
-            existing_features = [f for f in direct_features if f in df_2023.columns]
-            if existing_features:
-                direct_data = df_2023[existing_features].fillna(0).values.astype(np.float32)
-                direct_data = np.nan_to_num(direct_data, nan=0.0, posinf=1e6, neginf=-1e6)
-                
-                # Apply basic scaling (since we don't have the training scaler)
-                from sklearn.preprocessing import RobustScaler
-                scaler = RobustScaler()
-                direct_data = scaler.fit_transform(direct_data)
-                
-                prepared_inputs.append(direct_data)
-        
-        # Ensure we have the right number of inputs
-        num_expected_inputs = len(model.inputs)
-        while len(prepared_inputs) < num_expected_inputs:
-            # Pad with zeros if we're missing inputs
-            dummy_input = np.zeros((len(df_2023), 1), dtype=np.float32)
-            prepared_inputs.append(dummy_input)
-        
-        # Trim if we have too many
-        prepared_inputs = prepared_inputs[:num_expected_inputs]
-        
-        self.logger.info(f"    ✓ Manual preparation created {len(prepared_inputs)} inputs")
-        
-        # Debug: Check for out-of-range values
-        for i, input_data in enumerate(prepared_inputs):
-            max_val = np.max(input_data)
-            min_val = np.min(input_data)
-            self.logger.info(f"    Input {i}: shape={input_data.shape}, range=[{min_val:.2f}, {max_val:.2f}]")
-            
-            # Check if this looks like continuous features (integers in range that might be embeddings)
-            if input_data.dtype in [np.int32, np.int64] or (np.all(input_data == input_data.astype(int)) and max_val > 51):
-                self.logger.warning(f"    ⚠️  Input {i} has max value {max_val} > 51 (embedding limit)")
-                # Additional clipping
-                prepared_inputs[i] = np.clip(input_data, 0, 51).astype(np.int32)
-                self.logger.info(f"    ✓ Clipped input {i} to valid embedding range [0, 51]")
-            elif input_data.dtype in [np.int32, np.int64] or np.all(input_data == input_data.astype(int)):
-                # Integer data that might be for embeddings, check if already in valid range
-                if max_val == 51:
-                    self.logger.info(f"    ✓ Input {i} already in valid embedding range [0, 51]")
-                elif max_val < 51:
-                    self.logger.info(f"    ✓ Input {i} in valid range [0, {int(max_val)}]")
-        
-        return prepared_inputs
+            self.logger.error(f"    ❌ Training preprocessing failed: {str(e)}")
+            raise e
     
     def evaluate_single_model(self, model_path: str, split_num: int):
-        """Evaluate a single model on 2023 data."""
+        """Evaluate a single model on 2023 data with proper preprocessing."""
         self.logger.info(f"\n--- Evaluating Split {split_num} ---")
         self.logger.info(f"Model: {Path(model_path).name}")
         
@@ -367,8 +296,14 @@ class FixedModel2023Evaluator:
             # Log model info
             self.logger.info(f"    ✅ Model loaded: {model.count_params():,} parameters")
             
-            # Prepare test data
-            prepared_inputs = self.prepare_features_for_model(self.df_2023, self.modeling_features, model)
+            # FIXED: Load training encoders/scalers for this split
+            if not self.load_training_encoders_scalers(split_num):
+                if not self.reconstruct_training_preprocessing(split_num):
+                    self.logger.error(f"    ❌ Failed to load training preprocessing for Split {split_num}")
+                    return None
+            
+            # FIXED: Prepare test data using training preprocessing
+            prepared_inputs = self.prepare_features_with_training_preprocessing(self.df_2023, self.modeling_features)
             
             # Prepare target variable
             if 'sales_quantity_log' in self.df_2023.columns:
@@ -429,9 +364,9 @@ class FixedModel2023Evaluator:
             tf.keras.backend.clear_session()
     
     def run_complete_evaluation(self, engineered_dataset_path: str):
-        """Run complete evaluation on all models."""
+        """Run complete evaluation on all models with fixed preprocessing."""
         self.logger.info("=" * 80)
-        self.logger.info("PHASE 3: FIXED MODEL EVALUATION ON 2023 DATA")
+        self.logger.info("PHASE 3: ENHANCED MODEL EVALUATION ON 2023 DATA")
         self.logger.info("=" * 80)
         
         # Load 2023 data
@@ -487,7 +422,7 @@ class FixedModel2023Evaluator:
         # Save detailed results
         self.save_evaluation_results(all_results)
         
-        # Create visualizations
+        # Create clean visualizations
         self.create_visualizations(all_results)
         
         return {
@@ -542,36 +477,16 @@ class FixedModel2023Evaluator:
         summary_df.to_csv(summary_file, index=False)
         
         self.logger.info(f"  ✅ Summary CSV: {summary_file}")
-        
-        # Save predictions CSV for detailed analysis
-        predictions_data = []
-        for split_num, result in all_results.items():
-            n_samples = len(result['predictions'])
-            for i in range(min(n_samples, 1000)):  # Limit to first 1000 samples
-                predictions_data.append({
-                    'split_number': split_num,
-                    'sample_index': i,
-                    'predicted_sales': result['predictions'][i],
-                    'actual_sales': result['actuals'][i],
-                    'absolute_error': abs(result['predictions'][i] - result['actuals'][i]),
-                    'percentage_error': abs(result['predictions'][i] - result['actuals'][i]) / result['actuals'][i] * 100
-                })
-        
-        predictions_df = pd.DataFrame(predictions_data)
-        predictions_file = self.output_dir / f"2023_predictions_sample_{timestamp}.csv"
-        predictions_df.to_csv(predictions_file, index=False)
-        
-        self.logger.info(f"  ✅ Predictions sample: {predictions_file}")
-    
+
     def create_visualizations(self, all_results):
-        """Create visualization plots for the evaluation results."""
-        self.logger.info("📊 Creating visualizations...")
+        """Create clean visualization plots for the fixed evaluation results."""
+        self.logger.info("📊 Creating clean visualizations...")
         
         try:
             # Set up the plotting style
             plt.style.use('default')
             fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-            fig.suptitle('Model Performance on 2023 Data', fontsize=16, fontweight='bold')
+            fig.suptitle('Enhanced Model Performance on 2023 Data', fontsize=16, fontweight='bold')
             
             # Extract data for plotting
             split_nums = list(all_results.keys())
@@ -580,8 +495,8 @@ class FixedModel2023Evaluator:
             r2s = [all_results[s]['r2'] for s in split_nums]
             
             # Plot 1: MAPE by Split
-            axes[0,0].bar(split_nums, mapes, color='skyblue', alpha=0.7)
-            axes[0,0].set_title('MAPE by Model Split')
+            bars1 = axes[0,0].bar(split_nums, mapes, color='skyblue', alpha=0.7)
+            axes[0,0].set_title('MAPE by Model Split', fontweight='bold')
             axes[0,0].set_xlabel('Split Number')
             axes[0,0].set_ylabel('MAPE (%)')
             axes[0,0].grid(True, alpha=0.3)
@@ -589,21 +504,35 @@ class FixedModel2023Evaluator:
             # Add value labels on bars
             for i, v in enumerate(mapes):
                 axes[0,0].text(split_nums[i], v + max(mapes)*0.01, f'{v:.1f}%', 
-                              ha='center', va='bottom')
+                              ha='center', va='bottom', fontweight='bold')
+            
+            # Add horizontal line for 20% MAPE target
+            axes[0,0].axhline(y=20, color='red', linestyle='--', alpha=0.7, 
+                             label='Business Target (20%)')
+            axes[0,0].legend()
             
             # Plot 2: RMSE by Split
             axes[0,1].bar(split_nums, rmses, color='lightcoral', alpha=0.7)
-            axes[0,1].set_title('RMSE by Model Split')
+            axes[0,1].set_title('RMSE by Model Split', fontweight='bold')
             axes[0,1].set_xlabel('Split Number')
             axes[0,1].set_ylabel('RMSE')
             axes[0,1].grid(True, alpha=0.3)
             
             # Plot 3: R² Score by Split
-            axes[1,0].bar(split_nums, r2s, color='lightgreen', alpha=0.7)
-            axes[1,0].set_title('R² Score by Model Split')
+            bars3 = axes[1,0].bar(split_nums, r2s, color='lightgreen', alpha=0.7)
+            axes[1,0].set_title('R² Score by Model Split', fontweight='bold')
             axes[1,0].set_xlabel('Split Number')
             axes[1,0].set_ylabel('R² Score')
             axes[1,0].grid(True, alpha=0.3)
+            
+            # Color bars based on R² score quality
+            for i, (bar, r2_val) in enumerate(zip(bars3, r2s)):
+                if r2_val > 0.1:
+                    bar.set_color('green')
+                elif r2_val > 0.0:
+                    bar.set_color('orange')
+                else:
+                    bar.set_color('red')
             
             # Plot 4: Actual vs Predicted for best model
             best_split = min(all_results.keys(), key=lambda x: all_results[x]['mape'])
@@ -617,32 +546,55 @@ class FixedModel2023Evaluator:
             actual_sample = best_result['actuals'][indices]
             pred_sample = best_result['predictions'][indices]
             
-            axes[1,1].scatter(actual_sample, pred_sample, alpha=0.6, s=20)
+            axes[1,1].scatter(actual_sample, pred_sample, alpha=0.6, s=20, color='blue')
             
             # Perfect prediction line
             min_val = min(actual_sample.min(), pred_sample.min())
             max_val = max(actual_sample.max(), pred_sample.max())
-            axes[1,1].plot([min_val, max_val], [min_val, max_val], 'r--', alpha=0.8, linewidth=2)
+            axes[1,1].plot([min_val, max_val], [min_val, max_val], 'r--', alpha=0.8, 
+                          linewidth=2, label='Perfect Prediction')
             
-            axes[1,1].set_title(f'Actual vs Predicted (Best Model - Split {best_split})')
+            axes[1,1].set_title(f'Actual vs Predicted (Best Model - Split {best_split})\nMAPE: {best_result["mape"]:.1f}%', 
+                               fontweight='bold')
             axes[1,1].set_xlabel('Actual Sales')
             axes[1,1].set_ylabel('Predicted Sales')
             axes[1,1].grid(True, alpha=0.3)
+            axes[1,1].legend()
             
             plt.tight_layout()
             
             # Save the plot
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            plot_file = self.output_dir / f"2023_evaluation_plots_{timestamp}.png"
+            plot_file = self.output_dir / f"2023_evaluation_clean_plots_{timestamp}.png"
             plt.savefig(plot_file, dpi=300, bbox_inches='tight')
             plt.close()
             
-            self.logger.info(f"  ✅ Visualization: {plot_file}")
+            self.logger.info(f"  ✅ Clean visualization: {plot_file}")
             
         except Exception as e:
             self.logger.warning(f"  ⚠️ Could not create visualizations: {str(e)}")
 
-# ===== MAIN EXECUTION =====
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description="Test enhanced models on 2023 data")
+    
+    parser.add_argument("--engineered-dataset", 
+                       type=str, 
+                       required=True,
+                       help="Path to engineered dataset pickle file")
+    
+    parser.add_argument("--models-dir",
+                       type=str,
+                       default="outputs/enhanced-model/models",
+                       help="Directory containing trained models")
+    
+    parser.add_argument("--log-level",
+                       type=str,
+                       default="INFO",
+                       choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+                       help="Logging level")
+    
+    return parser.parse_args()
 
 def main():
     """Main execution function."""
@@ -653,7 +605,7 @@ def main():
     
     # Print header
     logger.info("=" * 80)
-    logger.info("FIXED TENSORFLOW MODEL EVALUATION ON 2023 DATA")
+    logger.info("ENHANCED TENSORFLOW MODEL EVALUATION ON 2023 DATA")
     logger.info("=" * 80)
     logger.info(f"Execution started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"Dataset: {args.engineered_dataset}")
@@ -662,7 +614,7 @@ def main():
     
     try:
         # Initialize evaluator
-        evaluator = FixedModel2023Evaluator(args.models_dir)
+        evaluator = Model2023Evaluator(args.models_dir)
         
         # Run complete evaluation
         results = evaluator.run_complete_evaluation(args.engineered_dataset)
@@ -670,7 +622,6 @@ def main():
         if results:
             logger.info("\n🎉 Model evaluation completed successfully!")
             logger.info(f"✅ Results saved to: {evaluator.output_dir}")
-            logger.info(f"📁 This follows the same structure as Phase 2 training outputs")
             
             # Final performance summary
             summary = results['summary']
@@ -695,5 +646,4 @@ def main():
         return 1
 
 if __name__ == "__main__":
-    exit_code = main()
-    sys.exit(exit_code)
+    sys.exit(main()) 
