@@ -287,7 +287,7 @@ def run_phase3_evaluation(engineered_data_path, training_results, experiment_nam
     logger.info("PHASE 3: MODEL EVALUATION ON 2023 DATA")
     logger.info("=" * 80)
     
-    from scripts.phase3_test_model import FixedModel2023Evaluator
+    from scripts.phase3_test_model import Model2023Evaluator
     
     phase3_results = {}
     
@@ -297,7 +297,7 @@ def run_phase3_evaluation(engineered_data_path, training_results, experiment_nam
             logger.info("Evaluating Vanilla Models on 2023 data...")
             vanilla_models_dir = f"{args.output_dir}/{experiment_name}/vanilla_models"
             if Path(vanilla_models_dir).exists():
-                evaluator = FixedModel2023Evaluator(vanilla_models_dir)
+                evaluator = Model2023Evaluator(vanilla_models_dir)
                 vanilla_2023_results = evaluator.run_complete_evaluation(engineered_data_path)
                 phase3_results['vanilla'] = vanilla_2023_results
                 logger.info("✓ Vanilla model 2023 evaluation completed")
@@ -307,7 +307,7 @@ def run_phase3_evaluation(engineered_data_path, training_results, experiment_nam
             logger.info("Evaluating Enhanced Models on 2023 data...")
             enhanced_models_dir = f"{args.output_dir}/{experiment_name}/enhanced_models"
             if Path(enhanced_models_dir).exists():
-                evaluator = FixedModel2023Evaluator(enhanced_models_dir)
+                evaluator = Model2023Evaluator(enhanced_models_dir)
                 enhanced_2023_results = evaluator.run_complete_evaluation(engineered_data_path)
                 phase3_results['enhanced'] = enhanced_2023_results
                 logger.info("✓ Enhanced model 2023 evaluation completed")

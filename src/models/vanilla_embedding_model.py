@@ -439,6 +439,76 @@ class VanillaEmbeddingModel:
         
         return saved_files
     
+    def _save_model_with_fallbacks(self, model, model_save_path, split_num, timestamp, val_mape):
+        """Enhanced model saving with multiple fallback strategies + saves encoders/scalers"""
+        import os
+        import pickle
+        
+        # Create final filename with actual MAPE value (using .keras format for Keras 3)
+        base_dir = os.path.dirname(model_save_path)
+        final_filename = f'best_model_split_{split_num}_epoch_999_mape_{val_mape:.2f}_{timestamp}.keras'
+        final_model_path = os.path.join(base_dir, final_filename)
+        
+        # FIRST: Save encoders and scalers (CRITICAL FOR INFERENCE!)
+        encoders_scalers_path = os.path.join(base_dir, f'encoders_scalers_split_{split_num}.pkl')
+        try:
+            encoders_scalers_data = {
+                'encoders': self.encoders,
+                'scalers': self.scalers,
+                'split_num': split_num,
+                'timestamp': timestamp,
+                'val_mape': val_mape
+            }
+            with open(encoders_scalers_path, 'wb') as f:
+                pickle.dump(encoders_scalers_data, f)
+            print(f"      ✅ Encoders/scalers saved: {encoders_scalers_path}")
+        except Exception as e:
+            print(f"      ❌ Failed to save encoders/scalers: {str(e)[:100]}")
+            # This is critical - if we can't save encoders, inference will fail
+        
+        # Strategy 1: Native Keras format (recommended for Keras 3)
+        try:
+            model.save(final_model_path)  # Keras 3: native .keras format
+            print(f"      ✅ Native Keras format saved: {final_model_path}")
+            return True, final_model_path
+        except Exception as e:
+            print(f"      ⚠️ Native Keras save failed: {str(e)[:100]}")
+        
+        # Strategy 2: SavedModel format (fallback, most robust for complex models)
+        try:
+            # SavedModel needs a directory path, not a file path
+            savedmodel_dir = final_model_path.replace('.keras', '_savedmodel')
+            os.makedirs(savedmodel_dir, exist_ok=True)
+            model.save(savedmodel_dir)  # Standard save for SavedModel
+            print(f"      ✅ SavedModel saved: {savedmodel_dir}")
+            return True, savedmodel_dir
+        except Exception as e:
+            print(f"      ⚠️ SavedModel save failed: {str(e)[:100]}")
+        
+        # Strategy 3: Legacy H5 format (final fallback)
+        try:
+            h5_path = final_model_path.replace('.keras', '.h5')
+            model.save(h5_path, include_optimizer=False)
+            print(f"      ✅ H5 (no optimizer) saved: {h5_path}")
+            return True, h5_path
+        except Exception as e:
+            print(f"      ⚠️ H5 save failed: {str(e)[:100]}")
+        
+        # Strategy 4: Weights only + architecture (last resort)
+        try:
+            weights_path = final_model_path.replace('.keras', '_weights.h5')
+            architecture_path = final_model_path.replace('.keras', '_architecture.json')
+            
+            model.save_weights(weights_path)
+            with open(architecture_path, 'w') as f:
+                f.write(model.to_json())
+            
+            print(f"      ✅ Weights + architecture saved: {weights_path}")
+            return True, weights_path
+        except Exception as e:
+            print(f"      ❌ All save strategies failed: {str(e)[:100]}")
+            return False, None
+
     def safe_mape_calculation(self, y_true, y_pred):
         """Safe MAPE calculation"""
         y_true_orig = np.expm1(y_true)
@@ -598,69 +668,12 @@ class VanillaEmbeddingModel:
                 
                 print(f"💾 Attempting to save model: {model_path}")
                 
-                saved_model_path = None
-                save_error = None
+                # Use the enhanced saving mechanism
+                save_success, saved_model_path = self._save_model_with_fallbacks(
+                    model, model_path, i, timestamp, val_mape
+                )
                 
-                # Try multiple saving strategies
-                strategies = [
-                    ("H5_with_custom_objects", "h5"),
-                    ("H5_basic", "h5"), 
-                    ("SavedModel", "tf")
-                ]
-                
-                for strategy_name, save_format in strategies:
-                    try:
-                        print(f"  Trying {strategy_name} format...")
-                        
-                        if save_format == "h5":
-                            if strategy_name == "H5_with_custom_objects":
-                                # Try with include_optimizer=False to avoid optimizer issues
-                                model.save(model_path, save_format='h5', include_optimizer=False)
-                            else:
-                                # Basic H5 save
-                                model.save(model_path)
-                        else:
-                            # SavedModel format
-                            savedmodel_dir = model_path.replace('.h5', '_savedmodel')
-                            model.save(savedmodel_dir, save_format='tf')
-                            model_path = savedmodel_dir
-                        
-                        print(f"  ✅ {strategy_name} save successful")
-                        
-                        # Test loading immediately
-                        if save_format == "h5":
-                            # Test H5 loading
-                            import tensorflow as tf
-                            custom_objects = {
-                                'mape_metric_original_scale': mape_metric_original_scale,
-                                'rmse_metric_original_scale': rmse_metric_original_scale
-                            }
-                            
-                            # Add FeatureSliceLayer if it exists
-                            try:
-                                custom_objects['FeatureSliceLayer'] = FeatureSliceLayer
-                            except NameError:
-                                pass  # FeatureSliceLayer not defined
-                            
-                            test_model = tf.keras.models.load_model(model_path, custom_objects=custom_objects, compile=False)
-                            print(f"  ✅ {strategy_name} load test passed")
-                            del test_model
-                        else:
-                            # Test SavedModel loading
-                            test_model = tf.keras.models.load_model(model_path, compile=False)
-                            print(f"  ✅ {strategy_name} load test passed")
-                            del test_model
-                        
-                        saved_model_path = model_path
-                        break  # Success, exit loop
-                        
-                    except Exception as e:
-                        print(f"  ❌ {strategy_name} failed: {str(e)}")
-                        save_error = str(e)
-                        continue
-                
-                if not saved_model_path:
-                    print(f"❌ All save strategies failed. Last error: {save_error}")
+                save_error = None if save_success else "All save strategies failed"
                 
                 # Store comprehensive results
                 results = {
