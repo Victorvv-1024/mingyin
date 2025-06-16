@@ -156,3 +156,8 @@ backup_*/
 *.parquet
 *.feather
 *.hdf5
+
+# backup files
+*.backup
+*.bak
+backup_*/
