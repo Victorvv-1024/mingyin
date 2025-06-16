@@ -13,19 +13,17 @@ data/
 
 ## Expected Files
 
-### `raw/`
-- `sales_data.csv` - Historical sales data
-- `store_info.csv` - Store metadata and characteristics
-- `product_catalog.csv` - Product information
+### `raw/` - Historical sales data in Excel form
+- `2021.xlsx` 
+- `2022.xlsx`
+- `2023.xlsx` 
 
 ### `processed/`
-- `cleaned_sales.csv` - Preprocessed sales data
-- `store_features.csv` - Processed store information
+- `processed_data_{date}.pkl` - Processed data
+- `processing_metadata_{date}.pkl` - Metadata
 
 ### `engineered/`
-- `train_features.csv` - Training dataset with 80+ engineered features
-- `validation_features.csv` - Validation dataset
-- `test_features.csv` - Test dataset for 2023 evaluation
+- `sales_forecast_engineered_dataset_{date}.pkl` - Entire dataset with 300+ engineered features with time splits
 
 ## Usage
 
