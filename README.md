@@ -130,25 +130,96 @@ python src/scripts/phase3_test_model.py --models-dir outputs/models --engineered
 
 ## 🎯 Feature Engineering
 
-Our pipeline creates **80+ sophisticated features** specifically designed for Chinese e-commerce sales forecasting:
+Our pipeline creates **316 sophisticated features** across 9 major categories, specifically designed for Chinese e-commerce sales forecasting:
 
-### **Temporal Features**
-- **Chinese Calendar Integration**: Spring Festival, Golden Week, Singles' Day
-- **Seasonal Patterns**: Monthly, quarterly, yearly cycles
-- **Lag Features**: 1, 2, 3, 6, 12-month lags
-- **Rolling Statistics**: 3, 6, 12-month moving averages
+### **🕒 Temporal Features (24 features)**
 
-### **Business Intelligence Features**
-- **Store Categorization**: Tier-1/2/3 city classification
-- **Platform Dynamics**: Cross-platform competition analysis
-- **Customer Behavior**: Purchase patterns and loyalty metrics
-- **Promotional Calendar**: Major e-commerce events impact
+**Basic Temporal (19 features):**
+- **Calendar Features**: Month, quarter, year, day_of_year progressions
+- **Cyclical Encodings**: Sin/cos transformations for month, quarter, day_of_year
+- **Chinese Market Events**: Chinese New Year, Mid-year shopping festivals, Singles' Day
+- **Platform Interactions**: Month-specific platform performance (Douyin, JD, Tmall)
+- **Relationship Metrics**: Platform tenure, relationship duration tracking
 
-### **Advanced Analytics**
-- **Year-over-Year Growth**: Trend analysis
-- **Interaction Features**: Store × Brand × Platform combinations
-- **Market Share**: Competitive positioning metrics
-- **Seasonality Decomposition**: Trend, seasonal, residual components
+**Cyclical Patterns (5 features):**
+- **Time Progressions**: Days since epoch, week sin/cos encodings
+- **Market Events**: Singles' Day detection, promotional periods
+- **Brand Specialization**: Single brand specialist indicators
+
+### **🎯 Promotional & Seasonal Features (12 features)**
+- **Event Detection**: Holiday seasons, promotional periods identification
+- **Temporal Proximity**: Days to/from promotional events
+- **Promotional Intensity**: Market-wide promotional activity measurement
+- **Platform-Specific Promotions**: Platform × promotion interaction effects
+- **Responsiveness Segmentation**: High/moderate/low promotional response categories
+
+### **📊 Lag & Historical Features (15 features)**
+- **Multi-Period Lags**: 1, 2, 3, 6, 12-month historical values
+- **Multi-Metric Coverage**: Sales, amount, price lag features
+- **Comprehensive History**: Short-term (1-3 months) to long-term (12 months) patterns
+
+### **📈 Rolling Statistical Features (24 features)**
+- **Window Sizes**: 3, 6, 12-month rolling periods
+- **Statistical Measures**: Mean, std, min, max, median, quartiles (Q25, Q75)
+- **Advanced Metrics**: Coefficient of variation (CV) for volatility assessment
+- **Trend Stability**: Rolling statistics for trend consistency analysis
+
+### **⚡ Momentum & Trend Features (16 features)**
+- **Year-over-Year Analysis**: Up/down/stable trend classification
+- **Multi-Timeframe Trends**: 3-month, 6-month trend analysis
+- **Acceleration Metrics**: Sales acceleration, volatility measurements
+- **Momentum Classification**: Up/down/stable momentum with duration tracking
+- **Consistency Measures**: Trend consistency and momentum acceleration
+
+### **🏪 Customer Behavior Analytics (124 features)**
+
+**Store-Level Analytics (20 features):**
+- **Performance Metrics**: Sales mean/std/min/max, amount statistics
+- **Diversity Measures**: Brand count, product count, platform coverage
+- **Quality Indicators**: Consistency levels, size categorization
+- **Store Types**: Flagship, official, supermarket, specialty, franchise classifications
+
+**Brand-Level Analytics (40 features):**
+- **Market Performance**: Sales totals, market share (quantity & amount)
+- **Distribution Metrics**: Store count, platform coverage, product diversity
+- **Pricing Strategy**: Premium/budget/mid-range indicators
+- **Performance Tiers**: Low/medium/high performance classification
+
+**Product & Platform Analytics (20 features):**
+- **Diversity Metrics**: Product count and diversity levels
+- **Market Share**: Platform-specific and cross-platform market positioning
+- **Multi-Platform Strategy**: Platform exclusivity vs. omnichannel presence
+
+**Brand-Platform Interactions (44 features):**
+- **Chinese Liquor Brands**: Seasonal patterns for major brands (茅台, 五粮液, 西凤, etc.)
+- **Platform-Specific Performance**: JD-specific brand performance tracking
+- **Cross-Platform Analysis**: Brand performance across Douyin, JD, Tmall platforms
+
+### **🏆 Store Categorization Features (4 features)**
+- **Competitive Positioning**: Leader, major, minor, niche classifications
+- **Market Dominance**: Store position within competitive landscape
+- **Strategic Positioning**: Competitive advantage assessment
+
+### **🔄 Platform Dynamics Features (19 features)**
+- **Cross-Platform Competition**: Multi-platform presence analysis
+- **Performance Ratios**: Platform-specific performance comparisons
+- **Customer Behavior**: Platform loyalty vs. switching patterns
+- **Experience Levels**: Newcomer, experienced, veteran classifications
+- **Seasonal Dynamics**: Platform seasonal performance indexing
+- **Market Entry Strategy**: Early mover, late entrant, mid-entrant analysis
+
+### **🚨 Spike Detection Features (5 features)**
+- **Anomaly Detection**: Sales z-score calculations
+- **Spike Classification**: Major vs. moderate spike detection
+- **Deviation Analysis**: Deviation from moving averages
+- **Propensity Scoring**: Spike propensity risk assessment
+
+### **📋 Feature Engineering Summary**
+- **Total Features**: 316 engineered features
+- **Feature Categories**: 9 major analytical categories
+- **Chinese Market Focus**: Specialized features for Chinese e-commerce landscape
+- **Multi-Timeframe Analysis**: Short-term (days) to long-term (yearly) patterns
+- **Business Intelligence**: Comprehensive store, brand, and platform analytics
 
 ## 🤖 Model Architecture
 

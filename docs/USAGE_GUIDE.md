@@ -97,64 +97,321 @@ python src/scripts/phase1_feature_engineering.py \
     --years 2021 2022 2023
 ```
 
-### Feature Categories Created
+### Feature Categories Created (316 Total Features)
 
-#### 1. Temporal Features (25+ features)
+#### 1. 🕒 Temporal Features (24 features)
+
+**Basic Temporal (19 features):**
 ```python
-# Chinese Calendar Integration
-- spring_festival_period      # Spring Festival impact
-- golden_week_period         # National Day Golden Week
-- singles_day_period         # 11.11 Singles' Day
-- mid_autumn_festival        # Traditional festivals
+# Calendar Features
+- month, quarter, year        # Basic calendar units
+- day_of_year                # Day number in year (1-365)
+- month_progress             # Progress through month (0-1)
+- quarter_progress           # Progress through quarter (0-1)
 
-# Seasonal Patterns
-- month_encoded              # 1-12 month encoding
-- quarter_encoded            # Q1-Q4 quarter encoding
-- is_holiday_month           # Holiday month indicator
-- season_encoded             # Spring/Summer/Fall/Winter
+# Cyclical Encodings
+- month_sin, month_cos       # Sine/cosine month encoding
+- quarter_sin, quarter_cos   # Sine/cosine quarter encoding
+- day_of_year_sin, day_of_year_cos # Sine/cosine day encoding
 
-# Lag Features
-- lag_1_month, lag_2_month   # 1-2 month lags
-- lag_3_month, lag_6_month   # 3-6 month lags
-- lag_12_month               # Year-over-year lag
+# Chinese Market Events
+- is_chinese_new_year        # Spring Festival period
+- is_mid_year_shopping       # Mid-year shopping festivals
+- is_singles_day             # 11.11 Singles' Day
+
+# Platform Interactions
+- month_douyin_interaction   # Month × Douyin platform
+- month_jd_interaction       # Month × JD platform
+- month_tmall_interaction    # Month × Tmall platform
+
+# Relationship Metrics
+- relationship_duration_months # Business relationship length
+- platform_tenure_months     # Platform experience duration
 ```
 
-#### 2. Business Intelligence Features (30+ features)
+**Cyclical Patterns (5 features):**
 ```python
-# Store Analytics
-- store_tier_classification  # Tier 1/2/3 city stores
-- store_performance_rank     # Performance ranking
-- store_market_share         # Market share metrics
-- store_growth_trend         # Growth trajectory
+- days_since_epoch           # Absolute time progression
+- week_sin, week_cos         # Week cyclical encoding
+- is_singles_day             # Singles' Day detection
+- bm_single_brand_specialist # Brand specialization indicator
+```
 
-# Platform Dynamics
-- platform_competition_index # Cross-platform competition
-- platform_market_share      # Platform dominance
-- platform_growth_rate       # Platform growth trends
+#### 2. 🎯 Promotional & Seasonal Features (12 features)
+```python
+# Event Detection
+- is_promotional_period      # Active promotional periods
+- is_holiday_season         # Holiday season indicator
+- promotional_intensity     # Market-wide promotion intensity
+
+# Temporal Proximity
+- days_to_next_promo        # Days until next promotion
+- days_from_last_promo      # Days since last promotion
+
+# Platform-Specific Promotions
+- promo_douyin_interaction  # Promotion × Douyin effects
+- promo_jd_interaction      # Promotion × JD effects
+- promo_tmall_interaction   # Promotion × Tmall effects
+
+# Responsiveness Segmentation
+- platform_promo_highly_responsive    # High response segments
+- platform_promo_moderately_responsive # Moderate response segments
+- platform_promo_low_responsive       # Low response segments
+- platform_promo_lift                # Overall promotion lift
+```
+
+#### 3. 📊 Lag & Historical Features (15 features)
+```python
+# Multi-Period Lags (1, 2, 3, 6, 12 months)
+- sales_lag_1, sales_lag_2, sales_lag_3    # Short-term sales history
+- sales_lag_6, sales_lag_12                # Long-term sales history
+- amount_lag_1, amount_lag_2, amount_lag_3 # Short-term amount history
+- amount_lag_6, amount_lag_12              # Long-term amount history
+- price_lag_1, price_lag_2, price_lag_3   # Short-term price history
+- price_lag_6, price_lag_12                # Long-term price history
+```
+
+#### 4. 📈 Rolling Statistical Features (24 features)
+```python
+# 3-Month Rolling Statistics
+- sales_rolling_mean_3      # 3-month average
+- sales_rolling_std_3       # 3-month volatility
+- sales_rolling_min_3       # 3-month minimum
+- sales_rolling_max_3       # 3-month maximum
+- sales_rolling_cv_3        # 3-month coefficient of variation
+- sales_rolling_median_3    # 3-month median
+- sales_rolling_q25_3       # 3-month 25th percentile
+- sales_rolling_q75_3       # 3-month 75th percentile
+
+# 6-Month Rolling Statistics
+- sales_rolling_mean_6      # 6-month average
+- sales_rolling_std_6       # 6-month volatility
+- sales_rolling_min_6       # 6-month minimum
+- sales_rolling_max_6       # 6-month maximum
+- sales_rolling_cv_6        # 6-month coefficient of variation
+- sales_rolling_median_6    # 6-month median
+- sales_rolling_q25_6       # 6-month 25th percentile
+- sales_rolling_q75_6       # 6-month 75th percentile
+
+# 12-Month Rolling Statistics
+- sales_rolling_mean_12     # 12-month average
+- sales_rolling_std_12      # 12-month volatility
+- sales_rolling_min_12      # 12-month minimum
+- sales_rolling_max_12      # 12-month maximum
+- sales_rolling_cv_12       # 12-month coefficient of variation
+- sales_rolling_median_12   # 12-month median
+- sales_rolling_q25_12      # 12-month 25th percentile
+- sales_rolling_q75_12      # 12-month 75th percentile
+```
+
+#### 5. ⚡ Momentum & Trend Features (16 features)
+```python
+# Year-over-Year Analysis
+- yoy_trend_up             # Positive YoY trend
+- yoy_trend_down           # Negative YoY trend
+- yoy_trend_stable         # Stable YoY trend
+
+# Multi-Timeframe Trends
+- sales_trend_3m           # 3-month trend direction
+- sales_trend_6m           # 6-month trend direction
+- sales_acceleration       # Sales acceleration metric
+- sales_volatility_3m      # 3-month volatility
+- sales_volatility_6m      # 6-month volatility
+
+# Momentum Classification
+- momentum_up              # Upward momentum
+- momentum_down            # Downward momentum
+- momentum_stable          # Stable momentum
+- momentum_2m              # 2-month momentum
+- momentum_3m              # 3-month momentum
+- momentum_6m              # 6-month momentum
+
+# Consistency Measures
+- trend_consistency_3m     # 3-month trend consistency
+- momentum_acceleration    # Momentum acceleration rate
+```
+
+#### 6. 🏪 Customer Behavior Analytics (124 features)
+
+**Store-Level Analytics (20 features):**
+```python
+# Performance Metrics
+- store_sales_mean         # Average store sales
+- store_sales_std          # Store sales volatility
+- store_sales_min          # Minimum store sales
+- store_sales_max          # Maximum store sales
+- store_record_count       # Number of transactions
+- store_amount_mean        # Average transaction amount
+- store_amount_std         # Transaction amount volatility
+- store_price_mean         # Average price point
+- store_price_std          # Price volatility
+
+# Diversity Measures
+- store_brand_count        # Number of brands carried
+- store_product_count      # Number of products
+- store_sales_cv           # Sales coefficient of variation
+- store_sales_range        # Sales range (max-min)
+- store_price_cv           # Price coefficient of variation
+
+# Quality Indicators
+- store_consistency_high   # High consistency stores
+- store_consistency_medium # Medium consistency stores
+- store_consistency_low    # Low consistency stores
+- store_size_small         # Small store classification
+- store_size_medium        # Medium store classification
+- store_size_large         # Large store classification
+```
+
+**Brand-Level Analytics (40 features):**
+```python
+# Market Performance
+- brand_sales_mean         # Average brand sales
+- brand_sales_std          # Brand sales volatility
+- brand_sales_total        # Total brand sales
+- brand_amount_mean        # Average brand transaction
+- brand_amount_total       # Total brand revenue
+- brand_price_mean         # Average brand price
+- brand_price_std          # Brand price volatility
+
+# Distribution Metrics
+- brand_store_count        # Number of stores carrying brand
+- brand_platform_count     # Number of platforms
+- brand_product_count      # Number of products
+
+# Market Share
+- brand_market_share_quantity # Quantity market share
+- brand_market_share_amount   # Revenue market share
+- brand_diversity_stores      # Store diversity index
+- brand_diversity_platforms   # Platform diversity index
+
+# Pricing Strategy
+- brand_premium_indicator  # Premium brand indicator
+- brand_budget_indicator   # Budget brand indicator
+- brand_mid_range_indicator # Mid-range brand indicator
+
+# Performance Tiers
+- brand_performance_low    # Low performance tier
+- brand_performance_medium # Medium performance tier
+- brand_performance_high   # High performance tier
+```
+
+**Product & Platform Analytics (20 features):**
+```python
+# Diversity Metrics
+- product_diversity_count  # Product diversity index
+- product_diversity_low    # Low diversity classification
+- product_diversity_medium # Medium diversity classification
+- product_diversity_high   # High diversity classification
+- product_store_count      # Stores carrying product
+
+# Market Share
+- platform_market_share           # Platform market share
+- store_platform_market_share     # Store × Platform share
+- brand_platform_market_share     # Brand × Platform share
+
+# Store Classifications
+- store_type_flagship      # Flagship store type
+- store_type_official      # Official store type
+- store_type_supermarket   # Supermarket type
+- store_type_specialty     # Specialty store type
+- store_type_franchise     # Franchise store type
+- store_type_distributor   # Distributor type
+- store_type_third_party   # Third-party seller
+- store_type_cross_border  # Cross-border seller
+- store_type_score         # Store type quality score
+
+# Multi-Platform Strategy
+- store_multi_platform        # Multi-platform presence
+- store_multi_platform_binary # Binary multi-platform indicator
+- store_quality_score         # Overall quality score
+- store_quality_high          # High quality classification
+- store_quality_medium        # Medium quality classification
+- store_quality_low           # Low quality classification
+```
+
+**Brand-Platform Interactions (44 features):**
+```python
+# Chinese Liquor Brands - Seasonal Patterns
+- seasonal_brand_茅台      # Moutai seasonal patterns
+- seasonal_brand_五粮液    # Wuliangye seasonal patterns
+- seasonal_brand_西凤      # Xifeng seasonal patterns
+- seasonal_brand_习酒      # Xijiu seasonal patterns
+- seasonal_brand_汾酒      # Fenjiu seasonal patterns
+- seasonal_brand_泸州老窖  # Luzhou Laojiao seasonal patterns
+- seasonal_brand_牛栏山    # Niulanshan seasonal patterns
+- seasonal_brand_洋河      # Yanghe seasonal patterns
+- seasonal_brand_贵州      # Guizhou seasonal patterns
+- seasonal_brand_郎酒      # Langjiu seasonal patterns
+
+# JD Platform-Specific Brand Performance
+- platform_brand_jd_茅台      # Moutai on JD performance
+- platform_brand_jd_五粮液    # Wuliangye on JD performance
+- platform_brand_jd_西凤      # Xifeng on JD performance
+- platform_brand_jd_习酒      # Xijiu on JD performance
+- platform_brand_jd_牛栏山    # Niulanshan on JD performance
+- platform_brand_jd_泸州老窖  # Luzhou Laojiao on JD performance
+- platform_brand_jd_汾酒      # Fenjiu on JD performance
+- platform_brand_jd_洋河      # Yanghe on JD performance
+- platform_brand_jd_郎酒      # Langjiu on JD performance
+- platform_brand_jd_杜康      # Dukang on JD performance
+- platform_brand_jd_永丰      # Yongfeng on JD performance
+- platform_brand_jd_贵州      # Guizhou on JD performance
+- platform_brand_jd_红星      # Hongxing on JD performance
+- platform_brand_jd_金沙      # Jinsha on JD performance
+
+# Cross-Platform Analysis
+- platform_brand_douyin_其他  # Other brands on Douyin
+```
+
+#### 7. 🏆 Store Categorization Features (4 features)
+```python
+- competitive_leader       # Market leader stores
+- competitive_major        # Major competitive stores
+- competitive_minor        # Minor competitive stores
+- competitive_niche        # Niche market stores
+```
+
+#### 8. 🔄 Platform Dynamics Features (19 features)
+```python
+# Cross-Platform Competition
+- product_platform_count       # Number of platforms per product
+- cross_platform_competition   # Cross-platform competition index
+- platform_performance_ratio   # Platform performance comparison
+
+# Performance Classifications
+- platform_dominant_performance # Dominant platform performance
+- platform_balanced_performance # Balanced platform performance
+- platform_weak_performance     # Weak platform performance
 
 # Customer Behavior
-- customer_loyalty_score     # Loyalty metrics
-- purchase_frequency         # Purchase patterns
-- seasonal_preference        # Seasonal buying patterns
+- platform_loyal           # Platform-loyal customers
+- platform_switcher         # Platform-switching customers
+- platform_stable           # Stable platform usage
+
+# Experience Levels
+- platform_newcomer         # New to platform
+- platform_experienced      # Experienced platform users
+- platform_veteran          # Veteran platform users
+
+# Seasonal Dynamics
+- platform_seasonal_index   # Platform seasonal performance
+- platform_peak_season      # Peak season indicator
+- platform_normal_season    # Normal season indicator
+- platform_low_season       # Low season indicator
+
+# Market Entry Strategy
+- platform_early_mover      # Early market entrant
+- platform_late_entrant     # Late market entrant
+- platform_mid_entrant      # Mid-stage market entrant
 ```
 
-#### 3. Advanced Analytics Features (25+ features)
+#### 9. 🚨 Spike Detection Features (5 features)
 ```python
-# Rolling Statistics
-- rolling_3m_mean           # 3-month moving average
-- rolling_6m_mean           # 6-month moving average
-- rolling_12m_mean          # 12-month moving average
-- rolling_3m_std            # 3-month volatility
-
-# Year-over-Year Analysis
-- yoy_growth_rate           # Year-over-year growth
-- yoy_growth_acceleration   # Growth acceleration
-- yoy_seasonal_adjustment   # Seasonal adjustments
-
-# Interaction Features
-- store_brand_interaction   # Store × Brand effects
-- platform_category_interaction # Platform × Category effects
-- seasonal_brand_interaction    # Seasonal × Brand effects
+- sales_z_score            # Sales z-score for anomaly detection
+- sales_spike_major        # Major sales spike indicator
+- sales_spike_moderate     # Moderate sales spike indicator
+- sales_deviation_from_ma  # Deviation from moving average
+- spike_propensity_score   # Propensity for sales spikes
 ```
 
 ### Feature Engineering Configuration
