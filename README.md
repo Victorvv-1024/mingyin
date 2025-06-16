@@ -181,10 +181,9 @@ Our pipeline creates **80+ sophisticated features** specifically designed for Ch
 
 | Metric | Vanilla Model | Enhanced Model | Target |
 |--------|---------------|----------------|---------|
-| Validation MAPE | ~18-22% | ~14-18% | <15% |
-| 2023 Test MAPE | ~20-25% | ~16-20% | <18% |
-| Training Time | ~30-45 min | ~45-60 min | - |
-| Model Size | ~2-5 MB | ~5-10 MB | - |
+| Validation MAPE | ~10-22% | ~14-18% | <20% |
+| 2023 Test MAPE | ~30-45% | ~16-20% | <20% |
+| Training Time | ~70 min | On Mac ~24 hr | - |
 
 ### **🔍 Vanilla Model Performance on 2023 Unseen Test Data**
 
@@ -210,7 +209,7 @@ The vanilla embedding model was evaluated on 2023 data to assess its generalizat
 - **Split 5**: 32.7% - **Best performance**, indicating model potential under optimal conditions
 
 **2. RMSE Consistency:**
-- All splits show similar RMSE values (~4500), indicating consistent absolute error magnitude
+- All splits show similar RMSE values (~4500), indicating consistent error magnitude
 - Uniform RMSE suggests the model maintains prediction scale consistency across folds
 
 **3. R² Score Analysis:**
