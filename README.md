@@ -175,7 +175,9 @@ Our pipeline creates **80+ sophisticated features** specifically designed for Ch
 - **Regularization**: Dropout, batch normalization, early stopping
 - **Custom Metrics**: MAPE and RMSE in original scale
 
-## 📊 Expected Performance
+## 📊 Model Performance Analysis
+
+### **Expected Performance Benchmarks**
 
 | Metric | Vanilla Model | Enhanced Model | Target |
 |--------|---------------|----------------|---------|
@@ -183,6 +185,74 @@ Our pipeline creates **80+ sophisticated features** specifically designed for Ch
 | 2023 Test MAPE | ~20-25% | ~16-20% | <18% |
 | Training Time | ~30-45 min | ~45-60 min | - |
 | Model Size | ~2-5 MB | ~5-10 MB | - |
+
+### **🔍 Vanilla Model Performance on 2023 Unseen Test Data**
+
+The vanilla embedding model was evaluated on 2023 data to assess its generalization capability on completely unseen data. Here's the comprehensive performance analysis:
+
+![Vanilla Model 2023 Evaluation](outputs/vanilla-model/reports/vanilla_model_2023_evaluation_plots_20250613_172409.png)
+
+#### **📈 Performance Summary**
+- **✅ Models Evaluated**: 5 cross-validation folds
+- **📊 Best MAPE**: 32.73% (Split 5)
+- **📊 Worst MAPE**: 43.35% (Split 1) 
+- **📊 Average MAPE**: 39.95%
+- **🏆 Overall Grade**: POOR
+- **💡 Assessment**: ❌ Poor performance - significant improvements needed
+
+#### **🔬 Detailed Analysis**
+
+**1. MAPE Performance by Split:**
+- **Split 1**: 43.4% - Highest error, indicating potential overfitting to training period
+- **Split 2**: 42.8% - Consistently high error across validation folds
+- **Split 3**: 38.3% - Best performing split, showing some generalization capability
+- **Split 4**: 42.6% - Similar to splits 1-2, suggesting systematic issues
+- **Split 5**: 32.7% - **Best performance**, indicating model potential under optimal conditions
+
+**2. RMSE Consistency:**
+- All splits show similar RMSE values (~4500), indicating consistent absolute error magnitude
+- Uniform RMSE suggests the model maintains prediction scale consistency across folds
+
+**3. R² Score Analysis:**
+- **Critical Issue**: All R² scores are negative (-0.001 to -0.0025)
+- **Interpretation**: Model performs worse than simply predicting the mean
+- **Root Cause**: Indicates fundamental model architecture or feature engineering issues
+
+**4. Actual vs Predicted Scatter Plot (Best Model - Split 5):**
+- **Severe Underprediction**: Model consistently predicts much lower values than actual sales
+- **Limited Range**: Predictions clustered in 0-2000 range while actual sales reach 15000+
+- **Poor Correlation**: Scatter shows no clear linear relationship between actual and predicted values
+
+#### **🚨 Key Issues Identified**
+
+1. **Scale Mismatch**: Model fails to capture the full range of sales values
+2. **Feature Inadequacy**: Current features may not capture essential sales drivers
+3. **Architecture Limitations**: Vanilla embedding approach insufficient for complex patterns
+4. **Temporal Generalization**: Poor performance on 2023 suggests overfitting to 2021-2022 patterns
+
+#### **💡 Improvement Recommendations**
+
+1. **Enhanced Model Architecture**: 
+   - Implement multi-head attention mechanisms
+   - Add residual connections for better gradient flow
+   - Increase model capacity with deeper networks
+
+2. **Feature Engineering Enhancements**:
+   - Add more sophisticated temporal features
+   - Include external economic indicators
+   - Implement advanced lag and rolling window features
+
+3. **Training Strategy Improvements**:
+   - Implement more robust cross-validation
+   - Add regularization techniques
+   - Use advanced optimizers (AdamW, RMSprop)
+
+4. **Data Quality Assessment**:
+   - Investigate data distribution shifts between training and test periods
+   - Analyze outliers and anomalies in 2023 data
+   - Consider domain adaptation techniques
+
+This analysis clearly demonstrates why the **EnhancedEmbeddingModel** was developed - to address these fundamental limitations and achieve production-ready performance.
 
 ## 🔧 Configuration Options
 

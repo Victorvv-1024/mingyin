@@ -61,25 +61,6 @@ Example: `outputs/20250616_120000/`
 - **Vanilla Model**: ~18-22% MAPE (baseline comparison)
 - **Enhanced Model**: ~14-18% MAPE (production deployment)
 
-## Usage Examples
-
-### Single Experiment
-```bash
-python run_complete_pipeline.py --model-type enhanced
-# Creates: outputs/20250616_120000/enhanced_models/
-```
-
-### Model Comparison
-```bash
-python run_complete_pipeline.py --model-type both
-# Creates: outputs/20250616_120000/{vanilla_models,enhanced_models}/
-```
-
-### Full Pipeline with 2023 Evaluation
-```bash
-python run_complete_pipeline.py --model-type both --run-phase3
-# Creates: outputs/20250616_120000/ with all subfolders
-```
 
 ## Note
 
