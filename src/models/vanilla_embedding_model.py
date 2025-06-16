@@ -1,9 +1,19 @@
 """
-Advanced embedding-based deep learning model for sales forecasting.
+Vanilla Embedding Model for Sales Forecasting
 
-This module implements the sophisticated neural network architecture
-from full_data_prediction.ipynb with proper feature processing and
-multi-input embedding strategies.
+This is the ORIGINAL/BASELINE implementation with fixed TensorFlow integration.
+This serves as the baseline model for comparison with the enhanced version.
+
+Key Features:
+- Standard embedding architecture
+- Basic attention mechanism
+- Original feature processing pipeline
+- Stable TensorFlow 2.x compatibility
+
+For enhanced features and better performance, use enhanced_embedding_model.py instead.
+
+Author: Sales Forecasting Team
+Date: 2025
 """
 
 import sys
@@ -74,8 +84,13 @@ def rmse_metric_original_scale(y_true, y_pred):
     y_pred_orig = tf.clip_by_value(y_pred_orig, 1.0, 1e6)
     return tf.sqrt(tf.reduce_mean(tf.square(y_true_orig - y_pred_orig)))
 
-class AdvancedEmbeddingModel:
-    """Fixed TensorFlow implementation matching your notebook exactly"""
+class VanillaEmbeddingModel:
+    """
+    Vanilla/Baseline Embedding Model for Sales Forecasting
+    
+    This is the original implementation serving as the baseline for comparison.
+    For enhanced features and better performance, use EnhancedEmbeddingModel.
+    """
     
     def __init__(self, random_seed=42):
         self.random_seed = random_seed
@@ -87,7 +102,7 @@ class AdvancedEmbeddingModel:
         tf.random.set_seed(random_seed)
         np.random.seed(random_seed)
         
-        print("✓ FixedAdvancedEmbeddingModel initialized with TensorFlow")
+        print("✓ VanillaEmbeddingModel initialized with TensorFlow")
     
     def categorize_features_for_embeddings(self, df, feature_columns):
         """Categorize features exactly like notebook"""
@@ -317,7 +332,7 @@ class AdvancedEmbeddingModel:
         output = layers.Dense(1, activation='linear', name='sales_prediction')(x)
         
         # Create model
-        model = Model(inputs=list(inputs.values()), outputs=output, name='AdvancedEmbeddingModel')
+        model = Model(inputs=list(inputs.values()), outputs=output, name='VanillaEmbeddingModel')
         
         # Compile with advanced optimizer (EXACTLY like notebook)
         optimizer = AdamW(
@@ -795,7 +810,7 @@ def main():
         logger.info(f"Dataset loaded: {len(df_final):,} records, {len(features)} features")
         
         # Initialize FIXED model
-        model = AdvancedEmbeddingModel(random_seed=42)
+        model = VanillaEmbeddingModel(random_seed=42)
         
         # Train with exact notebook parameters
         results = model.train_on_rolling_splits(

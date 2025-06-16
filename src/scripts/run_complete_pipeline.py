@@ -19,6 +19,7 @@ import os
 from pathlib import Path
 from datetime import datetime
 import logging
+import numpy as np
 
 # Add src to path for imports
 project_root = Path(__file__).parent.parent
@@ -103,6 +104,20 @@ def parse_arguments():
         "--engineered-dataset", 
         type=str,
         help="Path to existing engineered dataset (if --skip-feature-engineering is used)"
+    )
+    
+    parser.add_argument(
+        "--model-type",
+        type=str,
+        choices=["vanilla", "enhanced", "both"],
+        default="enhanced",
+        help="Model type to train: vanilla (baseline), enhanced (improved), or both"
+    )
+    
+    parser.add_argument(
+        "--run-phase3",
+        action="store_true",
+        help="Run Phase 3 (test models on 2023 data) after training"
     )
     
     return parser.parse_args()
@@ -210,11 +225,11 @@ def run_model_training_pipeline(engineered_data_path, modeling_features, rolling
     feature_pipeline = SalesFeaturePipeline()
     df_final, _, _, _ = feature_pipeline.load_engineered_dataset(engineered_data_path)
     
-    # Initialize model trainer
-    trainer = ModelTrainer(
-        output_dir=args.output_dir,
-        random_seed=args.random_seed
-    )
+    # Initialize model trainer with model type selection
+    from models.vanilla_embedding_model import VanillaEmbeddingModel
+    from models.enhanced_embedding_model import EnhancedEmbeddingModel
+    
+    training_results = {}
     
     # Generate experiment name if not provided
     experiment_name = args.experiment_name
@@ -229,15 +244,34 @@ def run_model_training_pipeline(engineered_data_path, modeling_features, rolling
     logger.info(f"  Random seed: {args.random_seed}")
     
     try:
-        # Train complete pipeline
-        training_results = trainer.train_complete_pipeline(
-            df_final=df_final,
-            features=modeling_features,
-            rolling_splits=rolling_splits,
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            experiment_name=experiment_name
-        )
+        # Train models based on selection
+        if args.model_type in ["vanilla", "both"]:
+            logger.info("Training Vanilla (Baseline) Model...")
+            vanilla_model = VanillaEmbeddingModel(random_seed=args.random_seed)
+            vanilla_results = vanilla_model.train_on_rolling_splits(
+                df_final=df_final,
+                features=modeling_features,
+                rolling_splits=rolling_splits,
+                epochs=args.epochs,
+                batch_size=args.batch_size,
+                models_dir=f"{args.output_dir}/{experiment_name}/vanilla_models"
+            )
+            training_results['vanilla'] = vanilla_results
+            logger.info("✓ Vanilla model training completed")
+        
+        if args.model_type in ["enhanced", "both"]:
+            logger.info("Training Enhanced Model...")
+            enhanced_model = EnhancedEmbeddingModel(random_seed=args.random_seed)
+            enhanced_results = enhanced_model.train_on_rolling_splits(
+                df_final=df_final,
+                features=modeling_features,
+                rolling_splits=rolling_splits,
+                epochs=args.epochs,
+                batch_size=args.batch_size,
+                models_dir=f"{args.output_dir}/{experiment_name}/enhanced_models"
+            )
+            training_results['enhanced'] = enhanced_results
+            logger.info("✓ Enhanced model training completed")
         
         logger.info("✓ Model training completed successfully")
         
@@ -247,44 +281,89 @@ def run_model_training_pipeline(engineered_data_path, modeling_features, rolling
         logger.error(f"Model training failed: {str(e)}")
         raise
 
-def print_final_summary(training_results, logger):
+def run_phase3_evaluation(engineered_data_path, training_results, experiment_name, args, logger):
+    """Run Phase 3: Test models on 2023 data."""
+    logger.info("=" * 80)
+    logger.info("PHASE 3: MODEL EVALUATION ON 2023 DATA")
+    logger.info("=" * 80)
+    
+    from scripts.phase3_test_model import FixedModel2023Evaluator
+    
+    phase3_results = {}
+    
+    try:
+        # Test vanilla models if trained
+        if 'vanilla' in training_results:
+            logger.info("Evaluating Vanilla Models on 2023 data...")
+            vanilla_models_dir = f"{args.output_dir}/{experiment_name}/vanilla_models"
+            if Path(vanilla_models_dir).exists():
+                evaluator = FixedModel2023Evaluator(vanilla_models_dir)
+                vanilla_2023_results = evaluator.run_complete_evaluation(engineered_data_path)
+                phase3_results['vanilla'] = vanilla_2023_results
+                logger.info("✓ Vanilla model 2023 evaluation completed")
+        
+        # Test enhanced models if trained
+        if 'enhanced' in training_results:
+            logger.info("Evaluating Enhanced Models on 2023 data...")
+            enhanced_models_dir = f"{args.output_dir}/{experiment_name}/enhanced_models"
+            if Path(enhanced_models_dir).exists():
+                evaluator = FixedModel2023Evaluator(enhanced_models_dir)
+                enhanced_2023_results = evaluator.run_complete_evaluation(engineered_data_path)
+                phase3_results['enhanced'] = enhanced_2023_results
+                logger.info("✓ Enhanced model 2023 evaluation completed")
+        
+        logger.info("✓ Phase 3 evaluation completed successfully")
+        return phase3_results
+        
+    except Exception as e:
+        logger.error(f"Phase 3 evaluation failed: {str(e)}")
+        return {}
+
+def print_final_summary(training_results, phase3_results, logger):
     """Print final pipeline summary."""
     logger.info("=" * 80)
     logger.info("PIPELINE EXECUTION SUMMARY")
     logger.info("=" * 80)
     
-    final_summary = training_results['final_summary']
-    comprehensive_results = training_results['comprehensive_results']
+    # Training Results Summary
+    logger.info("PHASE 2 TRAINING RESULTS:")
+    for model_type, results in training_results.items():
+        if results:
+            mapes = [result['val_mape'] for result in results.values()]
+            avg_mape = np.mean(mapes)
+            logger.info(f"  {model_type.title()} Model - Average MAPE: {avg_mape:.2f}%")
     
-    # Overall performance
-    logger.info(f"Experiment Status: {'✓ COMPLETED' if final_summary['experiment_completed'] else '✗ FAILED'}")
-    logger.info(f"Overall Grade: {final_summary['overall_grade']}")
-    logger.info(f"Average Validation MAPE: {final_summary['average_validation_mape']:.2f}%")
-    logger.info(f"Consistency Grade: {final_summary['consistency_grade']}")
-    logger.info(f"Business Ready: {'✓ YES' if final_summary['business_ready'] else '✗ NO'}")
+    # Phase 3 Results Summary
+    if phase3_results:
+        logger.info("\nPHASE 3 EVALUATION RESULTS (2023 Data):")
+        for model_type, results in phase3_results.items():
+            if results and 'overall_performance' in results:
+                overall_perf = results['overall_performance']
+                logger.info(f"  {model_type.title()} Model - 2023 MAPE: {overall_perf['mean_mape']:.2f}%")
     
-    # Performance range
-    logger.info(f"Best Split MAPE: {final_summary['best_split_mape']:.2f}%")
-    logger.info(f"Worst Split MAPE: {final_summary['worst_split_mape']:.2f}%")
-    logger.info(f"Total Splits Trained: {final_summary['total_splits_trained']}")
-    
-    # Platform performance
-    if 'platform_performance' in comprehensive_results:
-        logger.info("\nPlatform Performance:")
-        for platform, perf in comprehensive_results['platform_performance'].items():
-            logger.info(f"  {platform}: {perf['mean_mape']:.2f}% ± {perf['std_mape']:.2f}%")
-    
-    # Recommendations
-    logger.info("\nRecommendations:")
-    for recommendation in final_summary['recommendations']:
-        logger.info(f"  {recommendation}")
-    
-    # Saved files
-    saved_files = training_results['saved_files']
-    logger.info("\nGenerated Outputs:")
-    for key, filepath in saved_files.items():
-        if filepath and filepath != 'N/A':
-            logger.info(f"  {key}: {filepath}")
+    # Model Comparison
+    if len(training_results) > 1:
+        logger.info("\nMODEL COMPARISON:")
+        vanilla_mape = None
+        enhanced_mape = None
+        
+        if 'vanilla' in training_results:
+            vanilla_mapes = [result['val_mape'] for result in training_results['vanilla'].values()]
+            vanilla_mape = np.mean(vanilla_mapes)
+            logger.info(f"  Vanilla (Baseline): {vanilla_mape:.2f}%")
+        
+        if 'enhanced' in training_results:
+            enhanced_mapes = [result['val_mape'] for result in training_results['enhanced'].values()]
+            enhanced_mape = np.mean(enhanced_mapes)
+            logger.info(f"  Enhanced: {enhanced_mape:.2f}%")
+        
+        if vanilla_mape and enhanced_mape:
+            improvement = vanilla_mape - enhanced_mape
+            logger.info(f"  Improvement: {improvement:.2f} percentage points")
+            if improvement > 0:
+                logger.info("  ✅ Enhanced model outperforms vanilla baseline")
+            else:
+                logger.info("  ⚠️ Enhanced model underperforms vanilla baseline")
 
 def main():
     """Main pipeline execution function."""
@@ -324,8 +403,21 @@ def main():
             engineered_data_path, modeling_features, rolling_splits, metadata, args, logger
         )
         
-        # Phase 3: Final Summary
-        print_final_summary(training_results, logger)
+        # Phase 3: Model Evaluation (Optional)
+        phase3_results = {}
+        if args.run_phase3:
+            # Generate experiment name if not provided (same logic as Phase 2)
+            experiment_name = args.experiment_name
+            if experiment_name is None:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                experiment_name = f"sales_forecasting_experiment_{timestamp}"
+            
+            phase3_results = run_phase3_evaluation(
+                engineered_data_path, training_results, experiment_name, args, logger
+            )
+        
+        # Final Summary
+        print_final_summary(training_results, phase3_results, logger)
         
         logger.info("=" * 80)
         logger.info("PIPELINE COMPLETED SUCCESSFULLY")

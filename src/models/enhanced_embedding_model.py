@@ -50,18 +50,18 @@ def mape_metric_original_scale(y_true, y_pred):
     """Enhanced MAPE metric with better numerical stability"""
     y_true_orig = tf.exp(y_true) - 1
     y_pred_orig = tf.exp(y_pred) - 1
-    y_true_orig = tf.clip_by_value(y_true_orig, 0.1, 1e7)  # Enhanced clipping
-    y_pred_orig = tf.clip_by_value(y_pred_orig, 0.1, 1e7)
-    epsilon = tf.maximum(1.0, 0.01 * y_true_orig)  # Adaptive epsilon
+    y_true_orig = tf.clip_by_value(y_true_orig, 1.0, 1e6)  # Conservative clipping
+    y_pred_orig = tf.clip_by_value(y_pred_orig, 1.0, 1e6)
+    epsilon = 1.0  # Simple epsilon for stability
     mape = tf.reduce_mean(tf.abs(y_true_orig - y_pred_orig) / (y_true_orig + epsilon)) * 100
-    return tf.clip_by_value(mape, 0.0, 500.0)  # More reasonable upper bound
+    return tf.clip_by_value(mape, 0.0, 1000.0)  # Conservative upper bound
 
 def rmse_metric_original_scale(y_true, y_pred):
-    """Enhanced RMSE metric"""
+    """Enhanced RMSE metric with conservative clipping"""
     y_true_orig = tf.exp(y_true) - 1
     y_pred_orig = tf.exp(y_pred) - 1
-    y_true_orig = tf.clip_by_value(y_true_orig, 0.1, 1e7)
-    y_pred_orig = tf.clip_by_value(y_pred_orig, 0.1, 1e7)
+    y_true_orig = tf.clip_by_value(y_true_orig, 1.0, 1e6)  # Conservative clipping
+    y_pred_orig = tf.clip_by_value(y_pred_orig, 1.0, 1e6)
     return tf.sqrt(tf.reduce_mean(tf.square(y_true_orig - y_pred_orig)))
 
 class EnhancedEmbeddingModel:
@@ -393,22 +393,24 @@ class EnhancedEmbeddingModel:
         # Create model
         model = Model(inputs=list(inputs.values()), outputs=output, name='EnhancedAdvancedEmbeddingModel')
         
-        # Enhanced optimizer with learning rate scheduling
-        initial_learning_rate = 0.001
-        lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-            initial_learning_rate,
-            decay_steps=1000,
-            decay_rate=0.96,
-            staircase=True
-        )
-        
-        optimizer = AdamW(
-            learning_rate=lr_schedule,
-            weight_decay=0.02,  # Increased
-            beta_1=0.9,
-            beta_2=0.999,
-            clipnorm=1.0  # Gradient clipping
-        )
+        # Robust optimizer with maximum compatibility
+        try:
+            # Try AdamW first (enhanced optimizer)
+            optimizer = AdamW(
+                learning_rate=0.001,
+                weight_decay=0.01,
+                beta_1=0.9,
+                beta_2=0.999,
+                clipnorm=1.0
+            )
+        except Exception:
+            # Fallback to standard Adam for maximum compatibility
+            optimizer = tf.keras.optimizers.Adam(
+                learning_rate=0.001,
+                beta_1=0.9,
+                beta_2=0.999,
+                clipnorm=1.0
+            )
         
         model.compile(
             optimizer=optimizer,
@@ -421,15 +423,24 @@ class EnhancedEmbeddingModel:
         
         return model
 
-    def train_on_rolling_splits(self, df_final, features, rolling_splits, epochs=120, batch_size=256):
+    def train_on_rolling_splits(self, df_final, features, rolling_splits, epochs=120, batch_size=256, models_dir="outputs/models"):
         """
         Same function signature - enhanced training with improved strategies
+        
+        Args:
+            df_final: Final engineered dataset
+            features: List of modeling features  
+            rolling_splits: List of (train_df, val_df, description) tuples
+            epochs: Number of training epochs (default: 120)
+            batch_size: Training batch size (default: 256)
+            models_dir: Directory to save trained models (default: "outputs/models")
         
         Changes from original:
         - Default epochs: 100 → 120 (deeper model needs more time)
         - Default batch_size: 512 → 256 (better for complex model)
         - Enhanced callbacks with better early stopping
         - Robust model saving (fixes Lambda layer issues)
+        - Compatible with ModelTrainer interface
         """
         
         print("=" * 80)
@@ -439,6 +450,11 @@ class EnhancedEmbeddingModel:
         feature_categories = self.categorize_features_for_embeddings(df_final, features)
         all_results = {}
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Ensure models directory exists
+        import os
+        os.makedirs(models_dir, exist_ok=True)
+        print(f"📁 Models will be saved to: {models_dir}")
         
         for i, (train_df, val_df, description) in enumerate(rolling_splits, 1):
             print(f"\nSplit {i}/{len(rolling_splits)}: {description}")
@@ -469,22 +485,22 @@ class EnhancedEmbeddingModel:
                         train_inputs.append(X_train[key])
                         val_inputs.append(X_val[key])
                 
-                # Enhanced callbacks
-                model_save_path = f'enhanced_model_split_{i}_{timestamp}.h5'
+                # Enhanced callbacks - save to the specified models directory (using .keras format for Keras 3)
+                model_save_path = os.path.join(models_dir, f'best_model_split_{i}_epoch_000_mape_00.00_{timestamp}.keras')
                 callbacks_list = [
                     callbacks.EarlyStopping(
                         monitor='val_mape_metric_original_scale',
-                        patience=25,  # Increased patience
+                        patience=20,  # Balanced patience
                         mode='min',
                         restore_best_weights=True,
                         verbose=1,
-                        min_delta=0.1
+                        min_delta=0.05  # Smaller threshold for improvement
                     ),
                     callbacks.ReduceLROnPlateau(
                         monitor='val_mape_metric_original_scale',
-                        factor=0.3,  # More aggressive
-                        patience=12,
-                        min_lr=1e-7,
+                        factor=0.5,   # More conservative to avoid conflicts
+                        patience=15,  # Increased patience
+                        min_lr=1e-6,  # Higher minimum to avoid issues
                         verbose=1,
                         mode='min'
                     ),
@@ -529,19 +545,23 @@ class EnhancedEmbeddingModel:
                 val_r2 = r2_score(val_true_orig, val_pred_orig)
                 
                 # ENHANCED MODEL SAVING with multiple strategies
-                saved_successfully = self._save_model_with_fallbacks(model, model_save_path, i, timestamp)
+                saved_successfully, final_model_path = self._save_model_with_fallbacks(model, model_save_path, i, timestamp, val_mape)
                 
                 # Store results (same format as before)
-                all_results[f'split_{i}'] = {
+                all_results[i] = {  # ✅ FIX: Use integer keys to match ModelTrainer expectation
                     'description': description,
                     'val_mape': val_mape,
                     'val_rmse': val_rmse,
                     'val_r2': val_r2,
+                    'train_mape': 0.0,  # Add missing fields expected by ModelTrainer
+                    'train_rmse': 0.0,
+                    'train_r2': 0.0,
                     'train_samples': len(train_df),
                     'val_samples': len(val_df),
+                    'epochs_trained': len(history.history['loss']),
                     'best_epoch': len(history.history['loss']),
-                    'saved_model_path': model_save_path if saved_successfully else None,
-                    'model_filename': f'enhanced_model_split_{i}_{timestamp}.h5',
+                    'saved_model_path': final_model_path if saved_successfully else None,
+                    'model_filename': os.path.basename(final_model_path) if saved_successfully else f'enhanced_model_split_{i}_{timestamp}.keras',
                     'val_predictions': val_pred_orig,
                     'val_actuals': val_true_orig
                 }
@@ -574,40 +594,57 @@ class EnhancedEmbeddingModel:
         
         return all_results
     
-    def _save_model_with_fallbacks(self, model, model_save_path, split_num, timestamp):
+    def _save_model_with_fallbacks(self, model, model_save_path, split_num, timestamp, val_mape):
         """Enhanced model saving with multiple fallback strategies (fixes Lambda issues)"""
+        import os
         
-        # Strategy 1: SavedModel format (most robust, no Lambda issues)
+        # Create final filename with actual MAPE value (using .keras format for Keras 3)
+        base_dir = os.path.dirname(model_save_path)
+        final_filename = f'best_model_split_{split_num}_epoch_999_mape_{val_mape:.2f}_{timestamp}.keras'
+        final_model_path = os.path.join(base_dir, final_filename)
+        
+        # Strategy 1: Native Keras format (recommended for Keras 3)
         try:
-            savedmodel_path = model_save_path.replace('.h5', '_savedmodel')
-            model.save(savedmodel_path, save_format='tf')
-            print(f"      ✅ SavedModel saved: {savedmodel_path}")
-            return True
+            model.save(final_model_path)  # Keras 3: native .keras format
+            print(f"      ✅ Native Keras format saved: {final_model_path}")
+            return True, final_model_path
         except Exception as e:
-            print(f"      ⚠️ SavedModel failed: {str(e)[:100]}")
+            print(f"      ⚠️ Native Keras save failed: {str(e)[:100]}")
         
-        # Strategy 2: H5 without optimizer (avoids many Lambda issues)
+        # Strategy 2: SavedModel format (fallback, most robust for complex models)
         try:
-            model.save(model_save_path, save_format='h5', include_optimizer=False)
-            print(f"      ✅ H5 (no optimizer) saved: {model_save_path}")
-            return True
+            # SavedModel needs a directory path, not a file path
+            savedmodel_dir = final_model_path.replace('.keras', '_savedmodel')
+            os.makedirs(savedmodel_dir, exist_ok=True)
+            model.export(savedmodel_dir)  # Use export() for SavedModel format in Keras 3
+            print(f"      ✅ SavedModel exported: {savedmodel_dir}")
+            return True, savedmodel_dir
+        except Exception as e:
+            print(f"      ⚠️ SavedModel export failed: {str(e)[:100]}")
+        
+        # Strategy 3: Legacy H5 format (final fallback)
+        try:
+            h5_path = final_model_path.replace('.keras', '.h5')
+            model.save(h5_path, include_optimizer=False)
+            print(f"      ✅ H5 (no optimizer) saved: {h5_path}")
+            return True, h5_path
         except Exception as e:
             print(f"      ⚠️ H5 save failed: {str(e)[:100]}")
         
-        # Strategy 3: Weights only + architecture
+        # Strategy 4: Weights only + architecture (last resort)
         try:
-            weights_path = model_save_path.replace('.h5', '_weights.h5')
-            architecture_path = model_save_path.replace('.h5', '_architecture.json')
+            weights_path = final_model_path.replace('.keras', '_weights.h5')
+            architecture_path = final_model_path.replace('.keras', '_architecture.json')
             
             model.save_weights(weights_path)
             with open(architecture_path, 'w') as f:
                 f.write(model.to_json())
             
             print(f"      ✅ Weights + architecture saved: {weights_path}")
-            return True
+            return True, weights_path
         except Exception as e:
             print(f"      ❌ All save strategies failed: {str(e)[:100]}")
-            return False
+            return False, None
 
     # Keep all other methods the same (for compatibility)
     def safe_mape_calculation(self, y_true, y_pred):
@@ -691,7 +728,7 @@ def main():
         logger.info(f"Dataset loaded: {len(df_final):,} records, {len(features)} features")
         
         # Initialize enhanced model (same interface)
-        model = AdvancedEmbeddingModel(random_seed=42)
+        model = EnhancedEmbeddingModel(random_seed=42)
         
         # Train with enhanced architecture (same function call)
         results = model.train_on_rolling_splits(

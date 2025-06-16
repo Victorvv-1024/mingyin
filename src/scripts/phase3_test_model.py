@@ -5,7 +5,9 @@ COMPLETE FIXED Phase 3: Test Models on 2023 Data
 This script loads your working TensorFlow models and tests them on 2023 data.
 
 Usage:
-    python phase3_test_model.py --models-dir "outputs/fixed_model/models" --engineered-dataset "path/to/dataset.pkl"
+    python phase3_test_model.py --models-dir "outputs/phase2_experiment_20250113/models" --engineered-dataset "path/to/dataset.pkl"
+    
+Results will be automatically saved to: outputs/phase2_experiment_20250113/2023_evaluation/
 
 Author: Sales Forecasting Team (Fixed by Claude)
 Date: 2025-06-13
@@ -40,50 +42,8 @@ from utils.helpers import setup_logging
 
 # ===== CUSTOM FUNCTIONS AND CLASSES =====
 
-def mape_metric_original_scale(y_true, y_pred):
-    """MAPE metric in original scale for monitoring during training"""
-    y_true_orig = tf.exp(y_true) - 1
-    y_pred_orig = tf.exp(y_pred) - 1
-    y_true_orig = tf.clip_by_value(y_true_orig, 1.0, 1e6)
-    y_pred_orig = tf.clip_by_value(y_pred_orig, 1.0, 1e6)
-    epsilon = 1.0
-    mape = tf.reduce_mean(tf.abs(y_true_orig - y_pred_orig) / (y_true_orig + epsilon)) * 100
-    return tf.clip_by_value(mape, 0.0, 1000.0)
-
-def rmse_metric_original_scale(y_true, y_pred):
-    """RMSE in original scale for monitoring during training"""
-    y_true_orig = tf.exp(y_true) - 1
-    y_pred_orig = tf.exp(y_pred) - 1
-    y_true_orig = tf.clip_by_value(y_true_orig, 1.0, 1e6)
-    y_pred_orig = tf.clip_by_value(y_pred_orig, 1.0, 1e6)
-    return tf.sqrt(tf.reduce_mean(tf.square(y_true_orig - y_pred_orig)))
-
-class FeatureSliceLayer(layers.Layer):
-    """
-    Custom Keras layer to extract a single feature from input tensor.
-    
-    This replaces the problematic Lambda layer and is fully serializable.
-    Extracts the feature at the specified index while maintaining proper tensor shapes.
-    """
-    
-    def __init__(self, index, **kwargs):
-        super().__init__(**kwargs)
-        self.index = index
-    
-    def call(self, inputs):
-        # Extract single feature at index and expand dims to maintain shape
-        return tf.expand_dims(inputs[:, self.index], axis=1)
-    
-    def get_config(self):
-        """Enable proper serialization"""
-        config = super().get_config()
-        config.update({"index": self.index})
-        return config
-    
-    @classmethod
-    def from_config(cls, config):
-        """Enable proper deserialization"""
-        return cls(**config)
+# Import shared custom objects
+from models.custom_objects import get_custom_objects
 
 # ===== ARGUMENT PARSING =====
 
@@ -101,11 +61,6 @@ def parse_arguments():
                        default="outputs/fixed_model/models",
                        help="Directory containing trained models")
     
-    parser.add_argument("--output-dir",
-                       type=str,
-                       default="outputs/2023_evaluation_fixed",
-                       help="Output directory for evaluation results")
-    
     parser.add_argument("--log-level",
                        type=str,
                        default="INFO",
@@ -119,9 +74,15 @@ def parse_arguments():
 class FixedModel2023Evaluator:
     """Fixed evaluator that properly loads TensorFlow models and tests on 2023 data."""
     
-    def __init__(self, models_dir: str, output_dir: str):
+    def __init__(self, models_dir: str):
         self.models_dir = Path(models_dir)
-        self.output_dir = Path(output_dir)
+        
+        # ✅ FIX: Auto-determine output directory from models directory structure
+        # Follow the same pattern as Phase 2: {experiment-dir}/2023_evaluation/
+        # If models_dir is: outputs/phase2_experiment_20250113/models
+        # Then output_dir is: outputs/phase2_experiment_20250113/2023_evaluation/
+        experiment_dir = self.models_dir.parent
+        self.output_dir = experiment_dir / "2023_evaluation"
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # Split meanings for legend
@@ -206,12 +167,8 @@ class FixedModel2023Evaluator:
         """Load TensorFlow model with the correct custom objects."""
         self.logger.info(f"    Loading model: {Path(model_path).name}")
         
-        # Create the custom objects dictionary with all required functions
-        custom_objects = {
-            'mape_metric_original_scale': mape_metric_original_scale,
-            'rmse_metric_original_scale': rmse_metric_original_scale,
-            'FeatureSliceLayer': FeatureSliceLayer
-        }
+        # Get the custom objects dictionary with all required functions
+        custom_objects = get_custom_objects()
         
         try:
             model = tf.keras.models.load_model(model_path, custom_objects=custom_objects)
@@ -236,8 +193,8 @@ class FixedModel2023Evaluator:
         from pathlib import Path
         project_root = Path(__file__).parent.parent
         sys.path.insert(0, str(project_root / "src"))
-        # from models.advanced_embedding import AdvancedEmbeddingModel
-        from models.enhanced_model import EnhancedEmbeddingModel
+        # from models.vanilla_embedding_model import VanillaEmbeddingModel
+        from models.enhanced_embedding_model import EnhancedEmbeddingModel
         
         # Create an instance of AdvancedEmbeddingModel for feature processing
         # embedding_model = AdvancedEmbeddingModel()
@@ -287,8 +244,8 @@ class FixedModel2023Evaluator:
         """Manual feature preparation that mimics the embedding preprocessing."""
         
         # Get feature categories
-        # from models.advanced_embedding import AdvancedEmbeddingModel
-        from models.enhanced_model import EnhancedEmbeddingModel
+        # from models.vanilla_embedding_model import VanillaEmbeddingModel
+        from models.enhanced_embedding_model import EnhancedEmbeddingModel
         embedding_model = EnhancedEmbeddingModel()
         feature_categories = embedding_model.categorize_features_for_embeddings(df_2023, features)
         
@@ -701,19 +658,19 @@ def main():
     logger.info(f"Execution started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"Dataset: {args.engineered_dataset}")
     logger.info(f"Models directory: {args.models_dir}")
-    logger.info(f"Output directory: {args.output_dir}")
     logger.info(f"TensorFlow version: {tf.__version__}")
     
     try:
         # Initialize evaluator
-        evaluator = FixedModel2023Evaluator(args.models_dir, args.output_dir)
+        evaluator = FixedModel2023Evaluator(args.models_dir)
         
         # Run complete evaluation
         results = evaluator.run_complete_evaluation(args.engineered_dataset)
         
         if results:
             logger.info("\n🎉 Model evaluation completed successfully!")
-            logger.info(f"Check {args.output_dir} for detailed results")
+            logger.info(f"✅ Results saved to: {evaluator.output_dir}")
+            logger.info(f"📁 This follows the same structure as Phase 2 training outputs")
             
             # Final performance summary
             summary = results['summary']

@@ -13,8 +13,8 @@ from typing import Dict, List, Tuple, Optional, Union
 import logging
 from pathlib import Path
 
-from .advanced_embedding import AdvancedEmbeddingModel
-from .enhanced_model import EnhancedEmbeddingModel
+from .vanilla_embedding_model import VanillaEmbeddingModel
+from .enhanced_embedding_model import EnhancedEmbeddingModel
 from .feature_processor import FeatureProcessor
 
 logger = logging.getLogger(__name__)
@@ -49,8 +49,9 @@ class ModelTrainer:
             directory.mkdir(parents=True, exist_ok=True)
         
         # Initialize components
-        # self.model = AdvancedEmbeddingModel(random_seed=random_seed)
-        self.model = EnhancedEmbeddingModel(random_seed=random_seed)
+        # Choose model type (default to enhanced, but vanilla available for comparison)
+        # self.model = VanillaEmbeddingModel(random_seed=random_seed)  # Baseline model
+        self.model = EnhancedEmbeddingModel(random_seed=random_seed)  # Enhanced model
         self.training_results = {}
         self.experiment_metadata = {}
         

@@ -9,12 +9,14 @@ This package contains the complete deep learning infrastructure including:
 """
 
 from .feature_processor import FeatureProcessor
-from .advanced_embedding import AdvancedEmbeddingModel, mape_metric_original_scale, rmse_metric_original_scale
+from .vanilla_embedding_model import VanillaEmbeddingModel
+from .enhanced_embedding_model import EnhancedEmbeddingModel
 from .trainer import ModelTrainer
 
 __all__ = [
     'FeatureProcessor',
-    'AdvancedEmbeddingModel', 
+    'VanillaEmbeddingModel',
+    'EnhancedEmbeddingModel', 
     'mape_metric_original_scale',
     'rmse_metric_original_scale',
     'ModelTrainer'
