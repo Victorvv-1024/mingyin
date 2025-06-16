@@ -1,5 +1,7 @@
 # Sales Forecasting Pipeline - Complete Guide
 
+**English** | [中文简体](README.zh-CN.md)
+
 This repository contains a **production-ready, modular sales forecasting pipeline** with advanced deep learning models for accurate sales prediction. The system supports both baseline and enhanced models with comprehensive evaluation capabilities.
 
 ## 🏗️ Architecture Overview

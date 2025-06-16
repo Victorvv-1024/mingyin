@@ -1,5 +1,7 @@
 # Data Directory
 
+**English** | [中文简体](README.zh-CN.md)
+
 This directory contains the datasets used for the MingYin sales forecasting project.
 
 ## Directory Structure

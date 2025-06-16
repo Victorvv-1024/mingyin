@@ -1,5 +1,7 @@
 # Sales Forecasting Pipeline - Complete Usage Guide
 
+**English** | [中文简体](USAGE_GUIDE.zh-CN.md)
+
 This comprehensive guide covers all aspects of using the sales forecasting pipeline, from basic usage to advanced customization.
 
 ## 📋 Table of Contents
