@@ -273,6 +273,8 @@ Our pipeline creates **316 sophisticated features** across 9 major categories, s
 
 **🏆 Winner: Vanilla Model** shows **superior performance** in both validation and test phases!
 
+![Model Performance Comparison](docs/images/model_comparison.png)
+
 ### **🏆 Model Performance Comparison - Final Results**
 
 | Phase | Metric | Vanilla Model | Enhanced Model | Winner |
@@ -297,7 +299,7 @@ Our pipeline creates **316 sophisticated features** across 9 major categories, s
 
 The vanilla embedding model was evaluated on 2023 data to assess its generalization capability on completely unseen data. Here's the comprehensive performance analysis:
 
-![Vanilla Model 2023 Evaluation](outputs/vanilla-model/2023_evaluation/2023_evaluation_clean_plots_20250616_213017.png)
+![Vanilla Model 2023 Evaluation](docs/images/vanilla_model_2023_evaluation.png)
 
 #### **📈 Performance Summary - UPDATED RESULTS**
 - **✅ Models Evaluated**: 5 cross-validation folds
