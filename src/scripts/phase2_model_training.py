@@ -113,6 +113,14 @@ def parse_arguments():
         help="MAPE achieved in your notebook for comparison"
     )
     
+    parser.add_argument(
+        "--model-type",
+        type=str,
+        choices=["vanilla", "enhanced", "both"],
+        default="enhanced",
+        help="Model type to train: vanilla (baseline), enhanced (improved), or both"
+    )
+    
     return parser.parse_args()
 
 def validate_engineered_dataset(dataset_path, logger):
@@ -176,35 +184,51 @@ def run_model_training_pipeline(dataset_path, args, logger):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         experiment_name = f"phase2_model_training_{timestamp}"
     
+    # Import model classes based on selection
+    from models.vanilla_embedding_model import VanillaEmbeddingModel
+    from models.enhanced_embedding_model import EnhancedEmbeddingModel
+    
     # Create experiment-specific output directory
     experiment_output_dir = Path(args.output_dir) / experiment_name
     
-    # Initialize model trainer with experiment-specific directory
-    logger.info("Initializing model trainer...")
-    logger.info(f"Experiment output directory: {experiment_output_dir}")
-    trainer = ModelTrainer(
-        output_dir=str(experiment_output_dir),
-        random_seed=args.random_seed
-    )
-    
     logger.info(f"Experiment name: {experiment_name}")
     logger.info(f"Training parameters:")
+    logger.info(f"  Model type: {args.model_type}")
     logger.info(f"  Epochs: {args.epochs}")
     logger.info(f"  Batch size: {args.batch_size}")
     logger.info(f"  Random seed: {args.random_seed}")
     
+    training_results = {}
+    
     try:
-        # Train complete pipeline (replaces notebook model training)
-        logger.info("Starting model training (this replaces your notebook model training cells)...")
+        # Train models based on selection
+        if args.model_type in ["vanilla", "both"]:
+            logger.info("Training Vanilla (Baseline) Model...")
+            vanilla_model = VanillaEmbeddingModel(random_seed=args.random_seed)
+            vanilla_results = vanilla_model.train_on_rolling_splits(
+                df_final=df_final,
+                features=modeling_features,
+                rolling_splits=rolling_splits,
+                epochs=args.epochs,
+                batch_size=args.batch_size,
+                models_dir=str(experiment_output_dir / "vanilla_models")
+            )
+            training_results['vanilla'] = vanilla_results
+            logger.info("✓ Vanilla model training completed")
         
-        training_results = trainer.train_complete_pipeline(
-            df_final=df_final,
-            features=modeling_features,
-            rolling_splits=rolling_splits,
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            experiment_name=experiment_name
-        )
+        if args.model_type in ["enhanced", "both"]:
+            logger.info("Training Enhanced Model...")
+            enhanced_model = EnhancedEmbeddingModel(random_seed=args.random_seed)
+            enhanced_results = enhanced_model.train_on_rolling_splits(
+                df_final=df_final,
+                features=modeling_features,
+                rolling_splits=rolling_splits,
+                epochs=args.epochs,
+                batch_size=args.batch_size,
+                models_dir=str(experiment_output_dir / "enhanced_models")
+            )
+            training_results['enhanced'] = enhanced_results
+            logger.info("✓ Enhanced model training completed")
         
         logger.info("✓ Model training completed successfully")
         
@@ -220,169 +244,86 @@ def validate_model_performance(training_results, args, logger):
     logger.info("VALIDATING MODEL PERFORMANCE")
     logger.info("=" * 80)
     
-    final_summary = training_results['final_summary']
-    comprehensive_results = training_results['comprehensive_results']
-    
     validation_passed = True
     
-    # 1. Validate average MAPE
-    avg_mape = final_summary['average_validation_mape']
-    logger.info(f"MAPE validation:")
-    logger.info(f"  Achieved MAPE: {avg_mape:.2f}%")
-    logger.info(f"  Expected MAPE: ≤{args.expected_mape:.1f}%")
-    
-    if avg_mape > args.expected_mape:
-        logger.warning(f"⚠️ MAPE above expected threshold ({avg_mape:.2f}% > {args.expected_mape:.1f}%)")
-        validation_passed = False
-    else:
-        logger.info("✓ MAPE validation passed")
-    
-    # 2. Validate consistency
-    performance_metrics = comprehensive_results['performance_metrics']
-    mape_std = performance_metrics['validation_mape']['std']
-    logger.info(f"Consistency validation:")
-    logger.info(f"  MAPE standard deviation: {mape_std:.2f}%")
-    logger.info(f"  Consistency grade: {final_summary['consistency_grade']}")
-    
-    if mape_std > 5.0:  # High variance
-        logger.warning(f"⚠️ High variance across splits ({mape_std:.2f}%)")
-        validation_passed = False
-    else:
-        logger.info("✓ Consistency validation passed")
-    
-    # 3. Validate business readiness
-    business_ready = final_summary['business_ready']
-    overall_grade = final_summary['overall_grade']
-    logger.info(f"Business readiness validation:")
-    logger.info(f"  Overall grade: {overall_grade}")
-    logger.info(f"  Business ready: {'YES' if business_ready else 'NO'}")
-    
-    if not business_ready:
-        logger.warning("⚠️ Model not considered business-ready")
-        validation_passed = False
-    else:
-        logger.info("✓ Business readiness validation passed")
-    
-    # 4. Compare with notebook if provided
-    if args.notebook_mape:
-        logger.info(f"Notebook comparison:")
-        logger.info(f"  Notebook MAPE: {args.notebook_mape:.2f}%")
-        logger.info(f"  New model MAPE: {avg_mape:.2f}%")
-        
-        performance_diff = avg_mape - args.notebook_mape
-        if performance_diff > 5.0:  # Significantly worse
-            logger.warning(f"⚠️ Performance worse than notebook by {performance_diff:.2f}%")
-            validation_passed = False
-        elif performance_diff < -2.0:  # Significantly better
-            logger.info(f"✅ Performance better than notebook by {abs(performance_diff):.2f}%")
-        else:
-            logger.info("✓ Performance comparable to notebook")
-    
-    # 5. Validate split performance
-    split_performance = comprehensive_results['split_details']
-    logger.info(f"Split performance validation:")
-    
-    failed_splits = 0
-    for split_num, results in split_performance.items():
-        split_mape = results['val_mape']
-        if split_mape > args.expected_mape * 1.5:  # Allow 50% tolerance for individual splits
-            failed_splits += 1
-    
-    if failed_splits > len(split_performance) // 2:  # More than half splits failed
-        logger.warning(f"⚠️ {failed_splits}/{len(split_performance)} splits performed poorly")
-        validation_passed = False
-    else:
-        logger.info("✓ Split performance validation passed")
+    # Validate each model type that was trained
+    for model_type, results in training_results.items():
+        if results:  # Skip empty results
+            logger.info(f"\nValidating {model_type.title()} Model:")
+            
+            # Calculate average MAPE across splits
+            mapes = [result['val_mape'] for result in results.values()]
+            avg_mape = np.mean(mapes)
+            mape_std = np.std(mapes)
+            
+            logger.info(f"  MAPE validation:")
+            logger.info(f"    Achieved MAPE: {avg_mape:.2f}% ± {mape_std:.2f}%")
+            logger.info(f"    Expected MAPE: ≤{args.expected_mape:.1f}%")
+            
+            if avg_mape > args.expected_mape:
+                logger.warning(f"  ⚠️ MAPE above expected threshold ({avg_mape:.2f}% > {args.expected_mape:.1f}%)")
+                validation_passed = False
+            else:
+                logger.info("  ✓ MAPE validation passed")
+            
+            # Validate consistency
+            if mape_std > 5.0:
+                logger.warning(f"  ⚠️ High variance across splits ({mape_std:.2f}%)")
+                validation_passed = False
+            else:
+                logger.info("  ✓ Consistency validation passed")
+            
+            # Business readiness check
+            business_ready = avg_mape <= 20.0 and mape_std <= 5.0
+            logger.info(f"  Business ready: {'YES' if business_ready else 'NO'}")
+            
+            # Compare with notebook if provided
+            if args.notebook_mape and model_type == 'enhanced':  # Only compare enhanced with notebook
+                logger.info(f"  Notebook comparison:")
+                logger.info(f"    Notebook MAPE: {args.notebook_mape:.2f}%")
+                logger.info(f"    Enhanced model MAPE: {avg_mape:.2f}%")
+                
+                performance_diff = avg_mape - args.notebook_mape
+                if performance_diff > 5.0:
+                    logger.warning(f"  ⚠️ Performance worse than notebook by {performance_diff:.2f}%")
+                    validation_passed = False
+                elif performance_diff < -2.0:
+                    logger.info(f"  ✅ Performance better than notebook by {abs(performance_diff):.2f}%")
+                else:
+                    logger.info("  ✓ Performance comparable to notebook")
     
     return validation_passed
 
 def generate_comparison_report(training_results, args, logger):
-    """Generate detailed comparison report with notebook results."""
-    logger.info("Generating comparison report with notebook...")
+    """Generate simplified comparison report."""
+    logger.info("Generating comparison report...")
     
     # Create reports directory
     reports_dir = Path(args.output_dir) / "reports" / "phase2_validation"
     reports_dir.mkdir(parents=True, exist_ok=True)
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    final_summary = training_results['final_summary']
-    comprehensive_results = training_results['comprehensive_results']
-    
-    # Generate comparison report
     report_file = reports_dir / f"model_comparison_report_{timestamp}.txt"
     
     with open(report_file, 'w') as f:
         f.write("PHASE 2 MODEL TRAINING VALIDATION REPORT\n")
         f.write("=" * 60 + "\n\n")
-        
-        f.write("COMPARISON WITH NOTEBOOK RESULTS\n")
-        f.write("-" * 40 + "\n")
         f.write(f"Generated: {timestamp}\n")
-        f.write(f"Experiment: {training_results['experiment_metadata']['experiment_name']}\n")
-        f.write(f"Expected MAPE: ≤{args.expected_mape:.1f}%\n")
-        if args.notebook_mape:
-            f.write(f"Notebook MAPE: {args.notebook_mape:.2f}%\n")
-        f.write(f"Achieved MAPE: {final_summary['average_validation_mape']:.2f}%\n\n")
+        f.write(f"Model Type: {args.model_type}\n")
+        f.write(f"Expected MAPE: ≤{args.expected_mape:.1f}%\n\n")
         
-        # Performance comparison
-        f.write("PERFORMANCE COMPARISON\n")
-        f.write("-" * 40 + "\n")
-        f.write(f"Overall Grade: {final_summary['overall_grade']}\n")
-        f.write(f"Consistency: {final_summary['consistency_grade']}\n")
-        f.write(f"Business Ready: {'YES' if final_summary['business_ready'] else 'NO'}\n")
-        f.write(f"Best Split MAPE: {final_summary['best_split_mape']:.2f}%\n")
-        f.write(f"Worst Split MAPE: {final_summary['worst_split_mape']:.2f}%\n\n")
-        
-        # Individual split performance
-        f.write("INDIVIDUAL SPLIT PERFORMANCE\n")
-        f.write("-" * 40 + "\n")
-        split_results = training_results['training_results']
-        for split_num, results in split_results.items():
-            f.write(f"Split {split_num}: {results.get('description', 'N/A')}\n")
-            f.write(f"  Validation MAPE: {results['val_mape']:.2f}%\n")
-            f.write(f"  Validation RMSE: {results['val_rmse']:.0f}\n")
-            f.write(f"  Validation R²: {results['val_r2']:.3f}\n")
-            f.write(f"  Training samples: {results.get('train_samples', 'N/A'):,}\n")
-            f.write(f"  Validation samples: {results.get('val_samples', 'N/A'):,}\n\n")
-        
-        # Platform performance if available
-        if 'platform_performance' in comprehensive_results:
-            f.write("PLATFORM-SPECIFIC PERFORMANCE\n")
-            f.write("-" * 40 + "\n")
-            for platform, perf in comprehensive_results['platform_performance'].items():
-                f.write(f"{platform}:\n")
-                f.write(f"  Average MAPE: {perf['mean_mape']:.2f}% ± {perf['std_mape']:.2f}%\n")
-                f.write(f"  Range: {perf['min_mape']:.2f}% - {perf['max_mape']:.2f}%\n")
-                f.write(f"  Splits analyzed: {perf['splits_analyzed']}\n\n")
-        
-        # Training efficiency
-        training_efficiency = comprehensive_results['training_efficiency']
-        f.write("TRAINING EFFICIENCY\n")
-        f.write("-" * 40 + "\n")
-        f.write(f"Average epochs used: {training_efficiency['average_epochs_used']:.1f}\n")
-        f.write(f"Average best epoch: {training_efficiency['average_best_epoch']:.1f}\n")
-        f.write(f"Early stopping rate: {training_efficiency['early_stopping_rate']:.1%}\n")
-        f.write(f"Training stability: {training_efficiency['training_stability']:.3f}\n\n")
-        
-        # Recommendations
-        f.write("RECOMMENDATIONS\n")
-        f.write("-" * 40 + "\n")
-        for recommendation in final_summary['recommendations']:
-            f.write(f"• {recommendation}\n")
-        
-        f.write("\nNEXT STEPS\n")
-        f.write("-" * 40 + "\n")
-        if final_summary['business_ready']:
-            f.write("✅ Model is ready for production use\n")
-            f.write("1. Review detailed predictions in outputs/predictions/\n")
-            f.write("2. Validate results with business stakeholders\n")
-            f.write("3. Deploy model for regular forecasting\n")
-        else:
-            f.write("⚠️ Model needs improvement before production\n")
-            f.write("1. Review performance issues identified above\n")
-            f.write("2. Consider tuning hyperparameters or adding features\n")
-            f.write("3. Re-run training with adjustments\n")
+        for model_type, results in training_results.items():
+            if results:
+                f.write(f"{model_type.upper()} MODEL RESULTS\n")
+                f.write("-" * 40 + "\n")
+                
+                mapes = [result['val_mape'] for result in results.values()]
+                avg_mape = np.mean(mapes)
+                f.write(f"Average MAPE: {avg_mape:.2f}%\n")
+                
+                for split_num, result in results.items():
+                    f.write(f"Split {split_num}: MAPE {result['val_mape']:.2f}%, R² {result['val_r2']:.3f}\n")
+                f.write("\n")
     
     logger.info(f"Comparison report generated: {report_file}")
     return str(report_file)
@@ -393,53 +334,48 @@ def print_phase2_summary(training_results, validation_passed, args, logger):
     logger.info("PHASE 2 EXECUTION SUMMARY")
     logger.info("=" * 80)
     
-    final_summary = training_results['final_summary']
-    saved_files = training_results['saved_files']
-    
     logger.info(f"✓ Model training completed")
-    logger.info(f"✓ Average MAPE: {final_summary['average_validation_mape']:.2f}%")
-    logger.info(f"✓ Overall grade: {final_summary['overall_grade']}")
-    logger.info(f"✓ Business ready: {'YES' if final_summary['business_ready'] else 'NO'}")
-    logger.info(f"✓ Splits trained: {final_summary['total_splits_trained']}")
+    logger.info(f"✓ Model type: {args.model_type}")
+    
+    for model_type, results in training_results.items():
+        if results:
+            mapes = [result['val_mape'] for result in results.values()]
+            avg_mape = np.mean(mapes)
+            logger.info(f"✓ {model_type.title()} model average MAPE: {avg_mape:.2f}%")
+            business_ready = avg_mape <= 20.0
+            logger.info(f"✓ {model_type.title()} business ready: {'YES' if business_ready else 'NO'}")
     
     if validation_passed:
         logger.info("✅ VALIDATION PASSED - Model ready for production")
-        logger.info("\nMigration completed successfully!")
-        logger.info("Your notebook has been successfully replaced with modular code.")
         logger.info("\nNext steps:")
-        logger.info("1. Review the generated predictions and reports")
-        logger.info("2. Compare performance with your notebook expectations")
-        logger.info("3. Use the modular code for regular forecasting")
+        logger.info("1. Review the trained models")
+        logger.info("2. Use Phase 3 to test on 2023 data")
+        logger.info("3. Deploy for regular forecasting")
     else:
         logger.info("⚠️ VALIDATION ISSUES FOUND - Review before production")
         logger.info("\nRecommended actions:")
         logger.info("1. Review the performance issues mentioned above")
         logger.info("2. Consider adjusting training parameters")
-        logger.info("3. Check if additional features or tuning needed")
+        logger.info("3. Try different model architectures")
     
-    experiment_output_dir = Path(args.output_dir) / training_results['experiment_metadata']['experiment_name']
-    logger.info(f"\nGenerated outputs in {experiment_output_dir}:")
-    for key, filepath in saved_files.items():
-        if filepath and filepath != 'N/A':
-            # Show relative path from experiment directory for cleaner display
-            try:
-                rel_path = Path(filepath).relative_to(experiment_output_dir)
-                logger.info(f"  {key}: {rel_path}")
-            except ValueError:
-                # If not relative to experiment dir, show full path
-                logger.info(f"  {key}: {filepath}")
+    experiment_output_dir = Path(args.output_dir) / (args.experiment_name if args.experiment_name else "phase2_model_training_*")
+    logger.info(f"\nGenerated outputs in: {experiment_output_dir}")
     
     # Performance comparison with notebook
-    if args.notebook_mape:
-        performance_diff = final_summary['average_validation_mape'] - args.notebook_mape
-        if abs(performance_diff) <= 2.0:
-            logger.info(f"\n✅ Performance matches notebook expectations")
-            logger.info(f"   Difference: {performance_diff:+.2f}% (within acceptable range)")
-        else:
-            status = "⚠️" if performance_diff > 0 else "✅"
-            direction = "worse" if performance_diff > 0 else "better"
-            logger.info(f"\n{status} Performance {direction} than notebook")
-            logger.info(f"   Difference: {performance_diff:+.2f}%")
+    if args.notebook_mape and 'enhanced' in training_results:
+        enhanced_results = training_results['enhanced']
+        if enhanced_results:
+            mapes = [result['val_mape'] for result in enhanced_results.values()]
+            avg_mape = np.mean(mapes)
+            performance_diff = avg_mape - args.notebook_mape
+            if abs(performance_diff) <= 2.0:
+                logger.info(f"\n✅ Performance matches notebook expectations")
+                logger.info(f"   Difference: {performance_diff:+.2f}% (within acceptable range)")
+            else:
+                status = "⚠️" if performance_diff > 0 else "✅"
+                direction = "worse" if performance_diff > 0 else "better"
+                logger.info(f"\n{status} Performance {direction} than notebook")
+                logger.info(f"   Difference: {performance_diff:+.2f}%")
 
 def main():
     """Main execution function for Phase 2."""

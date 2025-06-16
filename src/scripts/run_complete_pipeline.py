@@ -22,7 +22,7 @@ import logging
 import numpy as np
 
 # Add src to path for imports
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).parent.parent.parent  # Go up to project root from src/scripts/
 sys.path.insert(0, str(project_root / "src"))
 
 # Import all pipeline components

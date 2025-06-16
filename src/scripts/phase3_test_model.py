@@ -585,8 +585,11 @@ def parse_arguments():
     
     parser.add_argument("--models-dir",
                        type=str,
-                       default="outputs/enhanced-model/models",
-                       help="Directory containing trained models")
+                       help="Directory containing trained models (required if not using --experiment-name)")
+    
+    parser.add_argument("--experiment-name",
+                       type=str,
+                       help="Experiment name to automatically find models (alternative to --models-dir)")
     
     parser.add_argument("--log-level",
                        type=str,
@@ -594,46 +597,102 @@ def parse_arguments():
                        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
                        help="Logging level")
     
+    parser.add_argument("--model-type",
+                       type=str,
+                       choices=["vanilla", "enhanced", "both"],
+                       default="enhanced",
+                       help="Model type to evaluate: vanilla, enhanced, or both")
+    
     return parser.parse_args()
 
 def main():
     """Main execution function."""
     args = parse_arguments()
     
+    # Validate arguments
+    if not args.models_dir and not args.experiment_name:
+        print("Error: Either --models-dir or --experiment-name must be provided")
+        return 1
+    
     # Setup logging
     logger = setup_logging(level=args.log_level)
     
     # Print header
     logger.info("=" * 80)
-    logger.info("ENHANCED TENSORFLOW MODEL EVALUATION ON 2023 DATA")
+    logger.info("PHASE 3: MODEL EVALUATION ON 2023 DATA")
     logger.info("=" * 80)
     logger.info(f"Execution started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"Dataset: {args.engineered_dataset}")
-    logger.info(f"Models directory: {args.models_dir}")
+    logger.info(f"Model type: {args.model_type}")
     logger.info(f"TensorFlow version: {tf.__version__}")
     
     try:
-        # Initialize evaluator
-        evaluator = Model2023Evaluator(args.models_dir)
+        # Determine models directory
+        models_dirs = []
         
-        # Run complete evaluation
-        results = evaluator.run_complete_evaluation(args.engineered_dataset)
-        
-        if results:
-            logger.info("\n🎉 Model evaluation completed successfully!")
-            logger.info(f"✅ Results saved to: {evaluator.output_dir}")
+        if args.models_dir:
+            models_dirs.append(("models", args.models_dir))
+        elif args.experiment_name:
+            # Auto-find model directories based on experiment name and model type
+            base_dir = Path("outputs") / args.experiment_name
             
-            # Final performance summary
-            summary = results['summary']
-            logger.info(f"\n📊 FINAL SUMMARY:")
-            logger.info(f"  Models evaluated: {summary['models_evaluated']}")
-            logger.info(f"  Best MAPE: {summary['best_mape']:.2f}%")
-            logger.info(f"  Average MAPE: {summary['average_mape']:.2f}%")
-            logger.info(f"  Performance grade: {summary['grade']}")
+            if args.model_type in ["vanilla", "both"]:
+                vanilla_dir = base_dir / "vanilla_models"
+                if vanilla_dir.exists():
+                    models_dirs.append(("vanilla", str(vanilla_dir)))
+            
+            if args.model_type in ["enhanced", "both"]:
+                enhanced_dir = base_dir / "enhanced_models"
+                if enhanced_dir.exists():
+                    models_dirs.append(("enhanced", str(enhanced_dir)))
+        
+        if not models_dirs:
+            logger.error("No model directories found!")
+            return 1
+        
+        all_evaluation_results = {}
+        
+        # Evaluate each model type
+        for model_type, models_dir in models_dirs:
+            logger.info(f"\nEvaluating {model_type.title()} models from: {models_dir}")
+            
+            # Initialize evaluator
+            evaluator = Model2023Evaluator(models_dir)
+            
+            # Run complete evaluation
+            results = evaluator.run_complete_evaluation(args.engineered_dataset)
+            
+            if results:
+                all_evaluation_results[model_type] = results
+                
+                # Model-specific summary
+                summary = results['summary']
+                logger.info(f"\n📊 {model_type.upper()} MODEL SUMMARY:")
+                logger.info(f"  Models evaluated: {summary['models_evaluated']}")
+                logger.info(f"  Best MAPE: {summary['best_mape']:.2f}%")
+                logger.info(f"  Average MAPE: {summary['average_mape']:.2f}%")
+                logger.info(f"  Performance grade: {summary['grade']}")
+            else:
+                logger.warning(f"⚠️ {model_type.title()} model evaluation failed")
+        
+        if all_evaluation_results:
+            logger.info("\n🎉 Model evaluation completed successfully!")
+            
+            # Compare model types if multiple were evaluated
+            if len(all_evaluation_results) > 1:
+                logger.info("\n🏆 MODEL COMPARISON:")
+                for model_type, results in all_evaluation_results.items():
+                    summary = results['summary']
+                    logger.info(f"  {model_type.title()}: {summary['average_mape']:.2f}% MAPE")
+                
+                # Determine best model
+                best_model = min(all_evaluation_results.items(), 
+                               key=lambda x: x[1]['summary']['average_mape'])
+                logger.info(f"  🥇 Best performing: {best_model[0].title()} model")
             
             return 0
         else:
-            logger.error("❌ Model evaluation failed")
+            logger.error("❌ All model evaluations failed")
             return 1
         
     except KeyboardInterrupt:
