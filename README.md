@@ -330,7 +330,7 @@ This analysis clearly demonstrates why the **EnhancedEmbeddingModel** was develo
 
 The enhanced embedding model was evaluated on 2023 data to assess real-world performance beyond the COVID-era training period. Here's the comprehensive analysis:
 
-![Enhanced Model 2023 Evaluation](outputs/enhanced-model/2023_evaluation_fixed/enhanced_model_2023_evaluation_clean.png)
+![Enhanced Model 2023 Evaluation](outputs/enhanced-model/2023_evaluation/enhanced_model_2023_evaluation_clean.png)
 
 #### **📈 Performance Summary**
 - **✅ Models Evaluated**: 5 cross-validation folds  
